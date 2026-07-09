@@ -1,0 +1,158 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Newmar Email Performance</title>
+  <link rel="stylesheet" href="assets/styles.css" />
+</head>
+<body>
+  <div class="app">
+    <header class="topbar">
+      <div class="topbar-title">
+        <span class="brand-mark" aria-hidden="true"></span>
+        <div>
+          <h1>Newmar Email Performance</h1>
+          <p class="subtitle">Individual emails &amp; workflow performance across the OLD → NEW HubSpot relaunch periods</p>
+        </div>
+      </div>
+      <button id="theme-toggle" class="theme-toggle" type="button" aria-label="Toggle dark mode">
+        <span class="theme-toggle-icon">◐</span> <span class="theme-toggle-label">Theme</span>
+      </button>
+    </header>
+
+    <nav class="tabs" role="tablist" aria-label="Dashboard sections">
+      <button class="tab-btn is-active" data-tab="overview" role="tab" aria-selected="true">Overview</button>
+      <button class="tab-btn" data-tab="emails" role="tab" aria-selected="false">Emails</button>
+      <button class="tab-btn" data-tab="workflows" role="tab" aria-selected="false">Workflows</button>
+    </nav>
+
+    <main>
+      <section id="tab-overview" class="tab-panel is-active" role="tabpanel">
+        <div id="overview-kpis" class="kpi-row"></div>
+
+        <div class="panel-grid">
+          <div class="card card-chart">
+            <div class="card-head">
+              <h2>Program-level engagement by period</h2>
+              <p class="card-sub">Open rate, click rate, and CTR across all sends — every workflow rolled together</p>
+            </div>
+            <div id="chart-program-trend" class="chart-slot"></div>
+            <div id="legend-program-trend" class="chart-legend"></div>
+          </div>
+
+          <div class="card card-chart">
+            <div class="card-head">
+              <h2>Total sends by period</h2>
+              <p class="card-sub">Volume swings shape the blended rate — read this alongside the chart above</p>
+            </div>
+            <div id="chart-program-volume" class="chart-slot"></div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-head">
+            <h2>What's driving the numbers</h2>
+            <p class="card-sub">Established storylines from the June 2026 analysis</p>
+          </div>
+          <ul id="insights-list" class="insights-list"></ul>
+        </div>
+      </section>
+
+      <section id="tab-emails" class="tab-panel" role="tabpanel">
+        <div class="filter-row">
+          <div class="filter-field filter-search">
+            <label for="email-search">Search</label>
+            <input id="email-search" type="search" placeholder="Search email name…" autocomplete="off" />
+          </div>
+          <div class="filter-field">
+            <label for="email-workflow-filter">Workflow</label>
+            <select id="email-workflow-filter"></select>
+          </div>
+          <div class="filter-field">
+            <label for="email-period-filter">Period</label>
+            <select id="email-period-filter">
+              <option value="latest">Latest available per email</option>
+            </select>
+          </div>
+          <div class="filter-field">
+            <label for="email-sort-metric">Sort by</label>
+            <select id="email-sort-metric">
+              <option value="sent">Sent</option>
+              <option value="open_rate_pct">Open rate</option>
+              <option value="click_rate_clicks_over_delivered_pct">Click rate</option>
+              <option value="ctr_clicks_over_opens_pct">CTR (clicks/opens)</option>
+            </select>
+          </div>
+          <button id="email-sort-dir" class="sort-dir-btn" type="button" title="Toggle sort direction">↓ Desc</button>
+          <div class="filter-count" id="email-count"></div>
+        </div>
+
+        <div class="card card-table">
+          <table class="data-table" id="email-table">
+            <thead>
+              <tr>
+                <th class="col-name">Email</th>
+                <th class="col-workflow">Workflow</th>
+                <th class="col-period">Period shown</th>
+                <th class="num">Sent</th>
+                <th class="num">Open rate</th>
+                <th class="num">Click rate</th>
+                <th class="num">CTR</th>
+                <th class="col-trend">Open rate trend</th>
+              </tr>
+            </thead>
+            <tbody id="email-table-body"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section id="tab-workflows" class="tab-panel" role="tabpanel">
+        <div class="panel-grid">
+          <div class="card card-chart">
+            <div class="card-head">
+              <h2>Open rate by workflow — May vs June</h2>
+              <p class="card-sub">OLD period isn't broken out by workflow (these workflows didn't exist yet)</p>
+            </div>
+            <div id="chart-workflow-openrate" class="chart-slot chart-slot-tall"></div>
+            <div id="legend-workflow-openrate" class="chart-legend"></div>
+          </div>
+
+          <div class="card card-chart">
+            <div class="card-head">
+              <h2>Send volume mix by workflow</h2>
+              <p class="card-sub">Share of total sends each workflow contributed, per period</p>
+            </div>
+            <div id="chart-workflow-mix" class="chart-slot chart-slot-tall"></div>
+            <div id="legend-workflow-mix" class="chart-legend chart-legend-wrap"></div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-head">
+            <h2>Workflow enrollment snapshot</h2>
+            <p class="card-sub">Point-in-time HubSpot enrollment counts — corroborates the SQL volume story independent of email sends</p>
+          </div>
+          <div id="enrollment-snapshot" class="stat-strip"></div>
+        </div>
+
+        <div class="card">
+          <div class="card-head">
+            <h2>All workflows</h2>
+            <p class="card-sub">Trigger logic, lifecycle filter, and performance detail — click a workflow to expand</p>
+          </div>
+          <div id="workflow-cards" class="workflow-cards"></div>
+        </div>
+      </section>
+    </main>
+
+    <footer class="app-footer">
+      Source: HubSpot workflow exports + June 2026 performance report. Regenerate <code>assets/data.js</code> via <code>scripts/export_data.py</code> after refreshing <code>data/newmar_email_ecosystem.db</code>.
+    </footer>
+  </div>
+
+  <script src="assets/data.js"></script>
+  <script src="assets/charts.js"></script>
+  <script src="assets/app.js"></script>
+</body>
+</html>
