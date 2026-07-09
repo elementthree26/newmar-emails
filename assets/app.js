@@ -121,7 +121,7 @@
     const sendsMax = Math.max(...sends.filter((v) => v != null));
     const barIndexed = sends.map((v) => (v == null ? null : (v / sendsMax) * 100));
 
-    const bar = { name: "Sent (indexed to peak)", color: seriesColor(0), values: barIndexed, rawValues: sends, rawFormat: (v) => Viz.fmtCommas(v) };
+    const bar = { name: "Sent", color: seriesColor(0), values: barIndexed, rawValues: sends, rawFormat: (v) => Viz.fmtCommas(v) };
     const lines = [
       { name: "Open rate", color: seriesColor(1), values: PERIODS.map((p) => (programByPeriod[p] ? programByPeriod[p].open_rate_pct : null)) },
       { name: "CTR", color: seriesColor(2), values: PERIODS.map((p) => (programByPeriod[p] ? programByPeriod[p].ctr_clicks_over_opens_pct : null)) },
@@ -133,12 +133,12 @@
     legend.textContent = "";
     const barItem = document.createElement("span");
     barItem.className = "legend-item";
-    barItem.innerHTML = `<span class="legend-swatch dot" style="background:${bar.color}"></span>Sent (bar, indexed to peak period)`;
+    barItem.innerHTML = `<span class="legend-swatch dot" style="background:${bar.color}"></span>${bar.name}`;
     legend.appendChild(barItem);
     lines.forEach((s) => {
       const item = document.createElement("span");
       item.className = "legend-item";
-      item.innerHTML = `<span class="legend-swatch" style="background:${s.color}"></span>${s.name} (line, actual %)`;
+      item.innerHTML = `<span class="legend-swatch" style="background:${s.color}"></span>${s.name}`;
       legend.appendChild(item);
     });
   }
