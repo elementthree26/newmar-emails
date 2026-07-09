@@ -213,6 +213,102 @@
     container.appendChild(svg);
   }
 
+  // ---- combo chart: one indexed bar series + N line series on a shared 0-100 axis
+  // opts: {
+  //   categories:[str],
+  //   bar: { name, color, values:[0-100 indexed], rawValues:[num], rawFormat(v) },
+  //   lines: [{ name, color, values:[0-100 real pct] }],
+  //   yFormat(v), height, barMax
+  // }
+  function comboBarLineChart(container, opts) {
+    container.textContent = "";
+    const width = container.clientWidth || 640;
+    const height = opts.height || 280;
+    const marginL = 44, marginR = 16, marginT = 28, marginB = 28;
+    const innerW = width - marginL - marginR;
+    const innerH = height - marginT - marginB;
+    const yFormat = opts.yFormat || ((v) => v + "%");
+    const n = opts.categories.length;
+    const groupW = innerW / n;
+    const barW = Math.min(opts.barMax || 56, groupW * 0.42);
+
+    const svg = el("svg", { viewBox: `0 0 ${width} ${height}`, width: "100%", height });
+    const gridlineColor = cssVar("--gridline");
+    const mutedColor = cssVar("--text-muted");
+    const baselineColor = cssVar("--baseline");
+    const surfaceColor = cssVar("--surface-1");
+    const primaryColor = cssVar("--text-primary");
+
+    const yMax = 100;
+    const steps = 4;
+    for (let i = 0; i <= steps; i++) {
+      const v = (yMax / steps) * i;
+      const y = marginT + innerH - (v / yMax) * innerH;
+      svg.appendChild(el("line", {
+        x1: marginL, x2: marginL + innerW, y1: y, y2: y,
+        stroke: i === 0 ? baselineColor : gridlineColor, "stroke-width": 1,
+      }));
+      const label = el("text", { x: marginL - 8, y: y + 4, "text-anchor": "end", fill: mutedColor, "font-size": 11 });
+      label.textContent = yFormat(v);
+      svg.appendChild(label);
+    }
+
+    const centers = opts.categories.map((_, i) => marginL + groupW * i + groupW / 2);
+
+    // bars
+    opts.categories.forEach((cat, i) => {
+      const v = opts.bar.values[i];
+      if (v == null) return;
+      const barH = (v / yMax) * innerH;
+      const x = centers[i] - barW / 2;
+      const y = marginT + innerH - barH;
+      const rect = el("rect", { x, y, width: barW, height: Math.max(barH, 1), fill: opts.bar.color, rx: 4, ry: 4 });
+      const rawLabel = opts.bar.rawFormat ? opts.bar.rawFormat(opts.bar.rawValues[i]) : opts.bar.rawValues[i];
+      rect.addEventListener("pointerenter", (e) => { rect.setAttribute("opacity", 0.82); emitTooltip(e); });
+      rect.addEventListener("pointermove", emitTooltip);
+      rect.addEventListener("pointerleave", () => { rect.setAttribute("opacity", 1); hideTooltip(); });
+      svg.appendChild(rect);
+
+      const cap = el("text", {
+        x: centers[i], y: y - 8, "text-anchor": "middle", fill: primaryColor, "font-size": 11, "font-weight": 600,
+      });
+      cap.textContent = rawLabel;
+      svg.appendChild(cap);
+
+      function emitTooltip(e) {
+        const rows = [{ color: opts.bar.color, label: opts.bar.name, value: rawLabel }];
+        opts.lines.forEach((s) => {
+          if (s.values[i] != null) rows.push({ color: s.color, label: s.name, value: yFormat(s.values[i]) });
+        });
+        showTooltip(e.clientX, e.clientY, cat, rows);
+      }
+    });
+
+    // lines
+    opts.lines.forEach((s) => {
+      const pts = s.values.map((v, i) => (v == null ? null : { x: centers[i], y: marginT + innerH - (v / yMax) * innerH, v }));
+      const validPts = pts.filter(Boolean);
+      if (!validPts.length) return;
+      const d = pts.map((p, i) => (p ? `${i === 0 || !pts[i - 1] ? "M" : "L"}${p.x},${p.y}` : null)).filter(Boolean).join(" ");
+      svg.appendChild(el("path", { d, fill: "none", stroke: s.color, "stroke-width": 2, "stroke-linecap": "round", "stroke-linejoin": "round" }));
+      validPts.forEach((p, idx) => {
+        const isLast = idx === validPts.length - 1;
+        const dot = el("circle", { cx: p.x, cy: p.y, r: isLast ? 5 : 4, fill: s.color, stroke: surfaceColor, "stroke-width": 2 });
+        dot.style.pointerEvents = "none";
+        svg.appendChild(dot);
+      });
+    });
+
+    // x labels
+    opts.categories.forEach((cat, i) => {
+      const label = el("text", { x: centers[i], y: height - 8, "text-anchor": "middle", fill: mutedColor, "font-size": 11 });
+      label.textContent = cat;
+      svg.appendChild(label);
+    });
+
+    container.appendChild(svg);
+  }
+
   // ---- grouped bar chart -------------------------------------------------
   // opts: { categories:[str], series:[{name,color,values}], yFormat(v), height, barMax }
   function groupedBarChart(container, opts) {
@@ -400,5 +496,5 @@
     container.appendChild(svg);
   }
 
-  global.Viz = { lineChart, groupedBarChart, stackedBarChart, sparkline, fmtCommas, showTooltip, hideTooltip };
+  global.Viz = { lineChart, comboBarLineChart, groupedBarChart, stackedBarChart, sparkline, fmtCommas, showTooltip, hideTooltip };
 })(window);

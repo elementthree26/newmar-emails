@@ -31,23 +31,13 @@
       <section id="tab-overview" class="tab-panel is-active" role="tabpanel">
         <div id="overview-kpis" class="kpi-row"></div>
 
-        <div class="panel-grid">
-          <div class="card card-chart">
-            <div class="card-head">
-              <h2>Program-level engagement by period</h2>
-              <p class="card-sub">Open rate, click rate, and CTR across all sends — every workflow rolled together</p>
-            </div>
-            <div id="chart-program-trend" class="chart-slot"></div>
-            <div id="legend-program-trend" class="chart-legend"></div>
+        <div class="card card-chart">
+          <div class="card-head">
+            <h2>Sends vs. engagement by period</h2>
+            <p class="card-sub">Bars are sent volume, indexed to the highest-volume period (actual count labeled on each bar) — read on the same 0–100 scale as the two rate lines, which are true percentages</p>
           </div>
-
-          <div class="card card-chart">
-            <div class="card-head">
-              <h2>Total sends by period</h2>
-              <p class="card-sub">Volume swings shape the blended rate — read this alongside the chart above</p>
-            </div>
-            <div id="chart-program-volume" class="chart-slot"></div>
-          </div>
+          <div id="chart-program-combo" class="chart-slot chart-slot-tall"></div>
+          <div id="legend-program-combo" class="chart-legend"></div>
         </div>
 
         <div class="card">

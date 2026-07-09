@@ -114,39 +114,33 @@
     });
   }
 
-  function renderProgramTrend() {
-    const container = document.getElementById("chart-program-trend");
-    const xLabels = PERIODS.map((p) => SHORT_PERIOD[p] || p);
-    const seriesDefs = [
-      { key: "open_rate_pct", name: "Open rate" },
-      { key: "click_rate_clicks_over_delivered_pct", name: "Click rate" },
-      { key: "ctr_clicks_over_opens_pct", name: "CTR" },
+  function renderProgramCombo() {
+    const container = document.getElementById("chart-program-combo");
+    const categories = PERIODS.map((p) => SHORT_PERIOD[p] || p);
+    const sends = PERIODS.map((p) => (programByPeriod[p] ? programByPeriod[p].total_sends : null));
+    const sendsMax = Math.max(...sends.filter((v) => v != null));
+    const barIndexed = sends.map((v) => (v == null ? null : (v / sendsMax) * 100));
+
+    const bar = { name: "Sent (indexed to peak)", color: seriesColor(0), values: barIndexed, rawValues: sends, rawFormat: (v) => Viz.fmtCommas(v) };
+    const lines = [
+      { name: "Open rate", color: seriesColor(1), values: PERIODS.map((p) => (programByPeriod[p] ? programByPeriod[p].open_rate_pct : null)) },
+      { name: "CTR", color: seriesColor(2), values: PERIODS.map((p) => (programByPeriod[p] ? programByPeriod[p].ctr_clicks_over_opens_pct : null)) },
     ];
-    const series = seriesDefs.map((s, i) => ({
-      name: s.name,
-      color: seriesColor(i),
-      values: PERIODS.map((p) => (programByPeriod[p] ? programByPeriod[p][s.key] : null)),
-    }));
-    Viz.lineChart(container, { series, xLabels, yFormat: (v) => v.toFixed(0) + "%", height: 260, yMaxOverride: 100 });
-    const legend = document.getElementById("legend-program-trend");
+
+    Viz.comboBarLineChart(container, { categories, bar, lines, yFormat: (v) => v.toFixed(0) + "%", height: 300, barMax: 64 });
+
+    const legend = document.getElementById("legend-program-combo");
     legend.textContent = "";
-    series.forEach((s) => {
+    const barItem = document.createElement("span");
+    barItem.className = "legend-item";
+    barItem.innerHTML = `<span class="legend-swatch dot" style="background:${bar.color}"></span>Sent (bar, indexed to peak period)`;
+    legend.appendChild(barItem);
+    lines.forEach((s) => {
       const item = document.createElement("span");
       item.className = "legend-item";
-      item.innerHTML = `<span class="legend-swatch" style="background:${s.color}"></span>${s.name}`;
+      item.innerHTML = `<span class="legend-swatch" style="background:${s.color}"></span>${s.name} (line, actual %)`;
       legend.appendChild(item);
     });
-  }
-
-  function renderProgramVolume() {
-    const container = document.getElementById("chart-program-volume");
-    const xLabels = PERIODS.map((p) => SHORT_PERIOD[p] || p);
-    const series = [{
-      name: "Sent",
-      color: seriesColor(0),
-      values: PERIODS.map((p) => (programByPeriod[p] ? programByPeriod[p].total_sends : null)),
-    }];
-    Viz.groupedBarChart(container, { categories: xLabels, series, yFormat: (v) => Viz.fmtCommas(v), height: 260, barMax: 64 });
   }
 
   function renderInsights() {
@@ -499,8 +493,7 @@
   // -----------------------------------------------------------------
   function renderAll() {
     renderKpis();
-    renderProgramTrend();
-    renderProgramVolume();
+    renderProgramCombo();
     renderInsights();
     renderEmailTable();
     renderWorkflowOpenRate();
@@ -510,8 +503,7 @@
   }
 
   rerenderAllCharts = function () {
-    renderProgramTrend();
-    renderProgramVolume();
+    renderProgramCombo();
     renderWorkflowOpenRate();
     renderWorkflowMix();
   };
