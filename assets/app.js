@@ -398,27 +398,19 @@
     const top = wfNamesByVolume.slice(0, TOP_N);
     const rest = wfNamesByVolume.slice(TOP_N);
 
-    const totals = periods.map((p) => wfNamesByVolume.reduce((a, w) => a + ((wfPerf[w][p] && wfPerf[w][p].sent) || 0), 0));
-
     const series = top.map((w, i) => ({
       name: shortName(w),
       color: seriesColor(i),
-      values: periods.map((p, pi) => {
-        const sent = (wfPerf[w][p] && wfPerf[w][p].sent) || 0;
-        return totals[pi] ? (sent / totals[pi]) * 100 : 0;
-      }),
+      values: periods.map((p) => (wfPerf[w][p] && wfPerf[w][p].sent) || 0),
     }));
     if (rest.length) {
       series.push({
         name: "Other",
         color: OTHER_COLOR(),
-        values: periods.map((p, pi) => {
-          const sent = rest.reduce((a, w) => a + ((wfPerf[w][p] && wfPerf[w][p].sent) || 0), 0);
-          return totals[pi] ? (sent / totals[pi]) * 100 : 0;
-        }),
+        values: periods.map((p) => rest.reduce((a, w) => a + ((wfPerf[w][p] && wfPerf[w][p].sent) || 0), 0)),
       });
     }
-    Viz.stackedBarChart(container, { categories, series, height: 300 });
+    Viz.stackedBarChart(container, { categories, series, height: 300, mode: "absolute" });
     const legend = document.getElementById("legend-workflow-mix");
     legend.textContent = "";
     series.forEach((s) => {

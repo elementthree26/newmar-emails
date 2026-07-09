@@ -394,30 +394,44 @@
 
   // ---- 100%-stacked bar chart (share of total) --------------------------
   // opts: { categories:[str], series:[{name,color,values}] } values are shares 0..100 already
+  // opts: { categories:[str], series:[{name,color,values}], height, mode:'percent'|'absolute', yFormat(v), tooltipFormat(v) }
+  // 'percent' (default): values are shares 0..100, axis is a fixed 0-100% scale.
+  // 'absolute': values are raw counts, axis is a niceMax'd scale over the tallest stacked total.
   function stackedBarChart(container, opts) {
     container.textContent = "";
     const width = container.clientWidth || 640;
     const height = opts.height || 260;
-    const marginL = 44, marginR = 16, marginT = 16, marginB = 30;
+    const marginL = 52, marginR = 16, marginT = 16, marginB = 30;
     const innerW = width - marginL - marginR;
     const innerH = height - marginT - marginB;
     const surfaceColor = cssVar("--surface-1");
     const mutedColor = cssVar("--text-muted");
     const gridlineColor = cssVar("--gridline");
     const baselineColor = cssVar("--baseline");
+    const isAbsolute = opts.mode === "absolute";
 
     const svg = el("svg", { viewBox: `0 0 ${width} ${height}`, width: "100%", height });
 
-    [0, 25, 50, 75, 100].forEach((v) => {
-      const y = marginT + innerH - (v / 100) * innerH;
+    let yMax = 100;
+    if (isAbsolute) {
+      const totals = opts.categories.map((_, ci) => opts.series.reduce((a, s) => a + (s.values[ci] || 0), 0));
+      yMax = niceMax(Math.max(...totals) * 1.1);
+    }
+    const yFormat = opts.yFormat || ((v) => (isAbsolute ? fmtCommas(v) : v + "%"));
+    const tooltipFormat = opts.tooltipFormat || ((v) => (isAbsolute ? fmtCommas(v) : v.toFixed(1) + "%"));
+
+    const tickCount = 4;
+    for (let i = 0; i <= tickCount; i++) {
+      const v = (yMax / tickCount) * i;
+      const y = marginT + innerH - (v / yMax) * innerH;
       svg.appendChild(el("line", {
         x1: marginL, x2: marginL + innerW, y1: y, y2: y,
-        stroke: v === 0 ? baselineColor : gridlineColor, "stroke-width": 1,
+        stroke: i === 0 ? baselineColor : gridlineColor, "stroke-width": 1,
       }));
       const label = el("text", { x: marginL - 8, y: y + 4, "text-anchor": "end", fill: mutedColor, "font-size": 11 });
-      label.textContent = v + "%";
+      label.textContent = yFormat(v);
       svg.appendChild(label);
-    });
+    }
 
     const groupW = innerW / opts.categories.length;
     const barW = Math.min(90, groupW * 0.5);
@@ -429,16 +443,16 @@
       opts.series.forEach((s) => {
         const v = s.values[ci] || 0;
         if (v <= 0) return;
-        const segH = Math.max((v / 100) * innerH - gap, 0);
-        const yTop = marginT + innerH - ((acc + v) / 100) * innerH;
+        const segH = Math.max((v / yMax) * innerH - gap, 0);
+        const yTop = marginT + innerH - ((acc + v) / yMax) * innerH;
         const rect = el("rect", {
           x, y: yTop, width: barW, height: segH, fill: s.color, rx: 3, ry: 3,
         });
         rect.addEventListener("pointerenter", (e) => {
           rect.setAttribute("opacity", 0.82);
-          showTooltip(e.clientX, e.clientY, cat, [{ color: s.color, label: s.name, value: v.toFixed(1) + "%" }]);
+          showTooltip(e.clientX, e.clientY, cat, [{ color: s.color, label: s.name, value: tooltipFormat(v) }]);
         });
-        rect.addEventListener("pointermove", (e) => showTooltip(e.clientX, e.clientY, cat, [{ color: s.color, label: s.name, value: v.toFixed(1) + "%" }]));
+        rect.addEventListener("pointermove", (e) => showTooltip(e.clientX, e.clientY, cat, [{ color: s.color, label: s.name, value: tooltipFormat(v) }]));
         rect.addEventListener("pointerleave", () => { rect.setAttribute("opacity", 1); hideTooltip(); });
         svg.appendChild(rect);
         acc += v;
