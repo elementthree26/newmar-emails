@@ -93,9 +93,6 @@
   const programByPeriod = {};
   D.program_level_metrics.forEach((r) => { programByPeriod[r.period_label] = r; });
 
-  const kpiByMetric = {};
-  D.june_2026_report_kpis.forEach((r) => { kpiByMetric[r.metric] = r; });
-
   // Computed directly from program_level_metrics (latest vs. prior period) rather
   // than the one-off june_2026_report_kpis table, so these tiles keep tracking
   // the actual latest period as new CSVs get imported instead of saying "(June)"
@@ -198,24 +195,26 @@
     const sqlSentDelta = PREV && sql && sql[PREV] && sql[CURR]
       ? ((sql[CURR].sent - sql[PREV].sent) / sql[PREV].sent) * 100 : null;
 
-    const enroll = {};
-    D.workflow_enrollment_snapshot.forEach((r) => { enroll[r.workflow_name] = r.enrolled_count; });
-    // This KPI table is a one-off import tied to the June 2026 report — only cite it
-    // when CURR is actually the period that report describes, so it doesn't go stale
-    // (and read as current) once later periods are imported.
-    const aimbaseSqlMom = CURR === "NEW (June 4-30)" ? kpiByMetric["SQLs Delivered to Aimbase"] : null;
-
     const factoryTour = wfByKey["2027 Self-Guided Factory Tour Request Nurture"];
     const invQuote = wfByKey["2027 - Inventory Request A Quote Nurture"];
 
     const items = [];
     items.push(`<strong>Top-of-funnel mix shapes the blended open rate.</strong> Brochure Downloads + Leads-Exploring made up ${topOfFunnelShare.toFixed(0)}% of all ${currShort} sends — these are naturally lower-engagement, top-of-funnel workflows, so blended open rate falls even without any single email getting worse.`);
     if (PREV && factoryTour && factoryTour[PREV] && factoryTour[CURR] && invQuote && invQuote[PREV] && invQuote[CURR]) {
-      items.push(`<strong>Niche behavior-triggered workflows are small but improving.</strong> Factory Tour open rate moved ${factoryTour[PREV].open_rate_pct.toFixed(1)}% → ${factoryTour[CURR].open_rate_pct.toFixed(1)}%; Inventory Quote moved ${invQuote[PREV].open_rate_pct.toFixed(1)}% → ${invQuote[CURR].open_rate_pct.toFixed(1)}%.`);
+      const ftDelta = factoryTour[CURR].open_rate_pct - factoryTour[PREV].open_rate_pct;
+      const iqDelta = invQuote[CURR].open_rate_pct - invQuote[PREV].open_rate_pct;
+      const bothUp = ftDelta >= 0 && iqDelta >= 0;
+      const bothDown = ftDelta < 0 && iqDelta < 0;
+      const headline = bothUp ? "Niche behavior-triggered workflows are small but improving."
+        : bothDown ? "Niche behavior-triggered workflows cooled off this period."
+        : "Niche behavior-triggered workflows: mixed signals.";
+      items.push(`<strong>${headline}</strong> Factory Tour open rate moved ${factoryTour[PREV].open_rate_pct.toFixed(1)}% → ${factoryTour[CURR].open_rate_pct.toFixed(1)}%; Inventory Quote moved ${invQuote[PREV].open_rate_pct.toFixed(1)}% → ${invQuote[CURR].open_rate_pct.toFixed(1)}% (both still low-volume, so a few sends can swing the rate a lot).`);
     }
     if (sqlSentDelta != null) {
-      const aimbaseClause = aimbaseSqlMom ? `, Aimbase SQL delivery ${aimbaseSqlMom.mom_change} MoM,` : ",";
-      items.push(`<strong>Watch SQL volume.</strong> SQL nurture email sends ${sqlSentDelta >= 0 ? "+" : ""}${sqlSentDelta.toFixed(0)}% ${prevShort}→${currShort}${aimbaseClause} and a HubSpot enrollment snapshot showing ${Viz.fmtCommas(enroll["2027 - Score Based SQL Nurture"] || 0)} SQL vs ${Viz.fmtCommas(enroll["Leads - Exploring"] || 0)} Lead / ${Viz.fmtCommas(enroll["2027 - Score Based MQL Considering Nurture"] || 0)} MQL enrolled — worth confirming this isn't a lead-scoring/handoff issue upstream of email.`);
+      const rebound = sqlSentDelta >= 0
+        ? "a rebound worth understanding the driver of (did the lead-scoring/handoff pipeline change, or did volume genuinely pick up?)"
+        : "worth confirming this isn't a lead-scoring/handoff issue upstream of email";
+      items.push(`<strong>Watch SQL volume.</strong> SQL nurture email sends ${sqlSentDelta >= 0 ? "+" : ""}${sqlSentDelta.toFixed(0)}% ${prevShort}→${currShort} — ${rebound}.`);
     }
     const ul = document.getElementById("insights-list");
     ul.innerHTML = items.map((i) => `<li>${i}</li>`).join("");
