@@ -1,14 +1,35 @@
 (function () {
   const D = window.NEWMAR_DATA;
   const PERIODS = D.period_order; // OLD, NEW-May, NEW-June
+  // Hand-tuned short labels for the periods currently in the source data.
+  // periodLabel() below falls back to an auto-prettified label for anything
+  // not listed here, so a newly-imported period still reads reasonably
+  // without needing this map updated by hand every time.
   const SHORT_PERIOD = {
     "OLD (Apr 11-May 7)": "OLD (Apr–May 7)",
     "NEW (May 8-Jun 3)": "May 8–Jun 3",
     "NEW (June 4-30)": "Jun 4–30",
   };
+  function periodLabel(p) {
+    if (!p) return p;
+    if (SHORT_PERIOD[p]) return SHORT_PERIOD[p];
+    const m = p.match(/^(OLD|NEW)\s*\((.+)\)$/);
+    if (!m) return p;
+    return m[2].replace(/-/g, "–");
+  }
 
   function cssVar(name) {
     return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+  }
+
+  // The Workflows tab compares "the latest period" against "the one before it."
+  // workflow_performance_by_period never has an OLD-period row (those workflows
+  // didn't exist pre-relaunch), so this recomputes from whatever's actually
+  // there each time a new period is imported, instead of naming two months.
+  function latestTwoWorkflowPeriods() {
+    const present = new Set(D.workflow_performance_by_period.map((r) => r.period_label));
+    const inOrder = PERIODS.filter((p) => present.has(p));
+    return [inOrder[inOrder.length - 2] || null, inOrder[inOrder.length - 1] || null];
   }
   function seriesColor(i) {
     return cssVar(`--series-${(i % 8) + 1}`);
@@ -75,40 +96,50 @@
   const kpiByMetric = {};
   D.june_2026_report_kpis.forEach((r) => { kpiByMetric[r.metric] = r; });
 
-  function deltaClass(str, goodWhenUp) {
-    if (!str) return "flat";
-    const isDown = str.trim().startsWith("-");
-    const isUp = str.trim().startsWith("+");
-    if (!isUp && !isDown) return "flat";
-    const up = isUp;
-    return (up === goodWhenUp) ? "up" : "down";
-  }
-  function deltaArrow(str) {
-    if (!str) return "";
-    if (str.trim().startsWith("-")) return "↓ ";
-    if (str.trim().startsWith("+")) return "↑ ";
-    return "";
-  }
-
+  // Computed directly from program_level_metrics (latest vs. prior period) rather
+  // than the one-off june_2026_report_kpis table, so these tiles keep tracking
+  // the actual latest period as new CSVs get imported instead of saying "(June)"
+  // forever. june_2026_report_kpis stays around for KPIs a plain email CSV can't
+  // supply (site traffic, HVTs, Aimbase delivery, etc.).
   function renderKpis() {
-    const tiles = [
-      { label: "Email open rate (June)", metric: "Email Ecosystem Open Rate", goodUp: true },
-      { label: "Click rate, clicks/delivered (June)", metric: "Email Ecosystem Click Rate (clicks/delivered)", goodUp: true },
-      { label: "CTR, clicks/opens (June)", metric: "Email Ecosystem CTR (clicks/opens)", goodUp: true },
-      { label: "Total sends (June)", metric: "Email Ecosystem Total Sends", goodUp: true },
-    ];
+    const idx = PERIODS.length - 1;
+    const currP = PERIODS[idx];
+    const prevP = idx > 0 ? PERIODS[idx - 1] : null;
+    const curr = programByPeriod[currP];
     const row = document.getElementById("overview-kpis");
     row.textContent = "";
+    if (!curr) return;
+    const prev = prevP ? programByPeriod[prevP] : null;
+    const currLabel = periodLabel(currP);
+    const prevLabel = prevP ? periodLabel(prevP) : null;
+
+    const tiles = [
+      { label: `Email open rate (${currLabel})`, value: fmtPct(curr.open_rate_pct), curKey: "open_rate_pct", kind: "pts", goodUp: true },
+      { label: `Click rate, clicks/delivered (${currLabel})`, value: fmtPct(curr.click_rate_clicks_over_delivered_pct), curKey: "click_rate_clicks_over_delivered_pct", kind: "pts", goodUp: true },
+      { label: `CTR, clicks/opens (${currLabel})`, value: fmtPct(curr.ctr_clicks_over_opens_pct), curKey: "ctr_clicks_over_opens_pct", kind: "pts", goodUp: true },
+      { label: `Total sends (${currLabel})`, value: fmtInt(curr.total_sends), curKey: "total_sends", kind: "pct", goodUp: true },
+    ];
+
     tiles.forEach((t) => {
-      const k = kpiByMetric[t.metric];
-      if (!k) return;
       const div = document.createElement("div");
       div.className = "kpi-tile";
-      const dClass = deltaClass(k.mom_change, t.goodUp);
+      let deltaHtml = "";
+      if (prev && curr[t.curKey] != null && prev[t.curKey] != null) {
+        const delta = t.kind === "pts"
+          ? curr[t.curKey] - prev[t.curKey]
+          : (prev[t.curKey] ? ((curr[t.curKey] - prev[t.curKey]) / prev[t.curKey]) * 100 : null);
+        if (delta != null) {
+          const sign = delta >= 0 ? "+" : "";
+          const dClass = (delta >= 0) === t.goodUp ? "up" : "down";
+          const arrow = delta >= 0 ? "↑ " : "↓ ";
+          const amount = t.kind === "pts" ? `${sign}${delta.toFixed(1)} pts` : `${sign}${Math.round(delta)}%`;
+          deltaHtml = `<div class="kpi-delta ${dClass}">${arrow}${amount} vs ${prevLabel}</div>`;
+        }
+      }
       div.innerHTML = `
         <div class="kpi-label">${t.label}</div>
-        <div class="kpi-value">${k.june_2026_value}</div>
-        <div class="kpi-delta ${dClass}">${deltaArrow(k.mom_change)}${k.mom_change || ""}</div>
+        <div class="kpi-value">${t.value}</div>
+        ${deltaHtml}
       `;
       row.appendChild(div);
     });
@@ -116,7 +147,7 @@
 
   function renderProgramCombo() {
     const container = document.getElementById("chart-program-combo");
-    const categories = PERIODS.map((p) => SHORT_PERIOD[p] || p);
+    const categories = PERIODS.map((p) => periodLabel(p));
     const sends = PERIODS.map((p) => (programByPeriod[p] ? programByPeriod[p].total_sends : null));
     const sendsMax = Math.max(...sends.filter((v) => v != null));
     const barIndexed = sends.map((v) => (v == null ? null : (v / sendsMax) * 100));
@@ -149,31 +180,42 @@
       wfByKey[r.workflow_name] = wfByKey[r.workflow_name] || {};
       wfByKey[r.workflow_name][r.period_label] = r;
     });
-    const MAY = "NEW (May 8-Jun 3)", JUN = "NEW (June 4-30)";
-    const juneRows = D.workflow_performance_by_period.filter((r) => r.period_label === JUN);
-    const juneTotal = juneRows.reduce((a, r) => a + (r.sent || 0), 0);
-    const topOfFunnelJune = ["2027 Brochure Downloads (per-model)", "Leads - Exploring"]
-      .reduce((a, name) => a + ((wfByKey[name] && wfByKey[name][JUN] && wfByKey[name][JUN].sent) || 0), 0);
-    const topOfFunnelShare = juneTotal ? (topOfFunnelJune / juneTotal) * 100 : 0;
+    const [PREV, CURR] = latestTwoWorkflowPeriods();
+    if (!CURR) {
+      document.getElementById("insights-list").innerHTML = "";
+      return;
+    }
+    const currShort = periodLabel(CURR);
+    const prevShort = PREV ? (periodLabel(PREV)) : null;
+
+    const currRows = D.workflow_performance_by_period.filter((r) => r.period_label === CURR);
+    const currTotal = currRows.reduce((a, r) => a + (r.sent || 0), 0);
+    const topOfFunnelCurr = ["2027 Brochure Downloads (per-model)", "Leads - Exploring"]
+      .reduce((a, name) => a + ((wfByKey[name] && wfByKey[name][CURR] && wfByKey[name][CURR].sent) || 0), 0);
+    const topOfFunnelShare = currTotal ? (topOfFunnelCurr / currTotal) * 100 : 0;
 
     const sql = wfByKey["2027 - Score Based SQL Nurture"];
-    const sqlSentDelta = sql && sql[MAY] && sql[JUN]
-      ? ((sql[JUN].sent - sql[MAY].sent) / sql[MAY].sent) * 100 : null;
+    const sqlSentDelta = PREV && sql && sql[PREV] && sql[CURR]
+      ? ((sql[CURR].sent - sql[PREV].sent) / sql[PREV].sent) * 100 : null;
 
     const enroll = {};
     D.workflow_enrollment_snapshot.forEach((r) => { enroll[r.workflow_name] = r.enrolled_count; });
-    const aimbaseSqlMom = kpiByMetric["SQLs Delivered to Aimbase"];
+    // This KPI table is a one-off import tied to the June 2026 report — only cite it
+    // when CURR is actually the period that report describes, so it doesn't go stale
+    // (and read as current) once later periods are imported.
+    const aimbaseSqlMom = CURR === "NEW (June 4-30)" ? kpiByMetric["SQLs Delivered to Aimbase"] : null;
 
     const factoryTour = wfByKey["2027 Self-Guided Factory Tour Request Nurture"];
     const invQuote = wfByKey["2027 - Inventory Request A Quote Nurture"];
 
     const items = [];
-    items.push(`<strong>Month-2 open-rate decline is mostly a mix shift.</strong> Brochure Downloads + Leads-Exploring made up ${topOfFunnelShare.toFixed(0)}% of all June sends — these are naturally lower-engagement, top-of-funnel workflows, so blended open rate falls even without any single email getting worse.`);
-    if (factoryTour && factoryTour[MAY] && factoryTour[JUN] && invQuote && invQuote[MAY] && invQuote[JUN]) {
-      items.push(`<strong>Niche behavior-triggered workflows are small but improving.</strong> Factory Tour open rate moved ${factoryTour[MAY].open_rate_pct.toFixed(1)}% → ${factoryTour[JUN].open_rate_pct.toFixed(1)}%; Inventory Quote moved ${invQuote[MAY].open_rate_pct.toFixed(1)}% → ${invQuote[JUN].open_rate_pct.toFixed(1)}%.`);
+    items.push(`<strong>Top-of-funnel mix shapes the blended open rate.</strong> Brochure Downloads + Leads-Exploring made up ${topOfFunnelShare.toFixed(0)}% of all ${currShort} sends — these are naturally lower-engagement, top-of-funnel workflows, so blended open rate falls even without any single email getting worse.`);
+    if (PREV && factoryTour && factoryTour[PREV] && factoryTour[CURR] && invQuote && invQuote[PREV] && invQuote[CURR]) {
+      items.push(`<strong>Niche behavior-triggered workflows are small but improving.</strong> Factory Tour open rate moved ${factoryTour[PREV].open_rate_pct.toFixed(1)}% → ${factoryTour[CURR].open_rate_pct.toFixed(1)}%; Inventory Quote moved ${invQuote[PREV].open_rate_pct.toFixed(1)}% → ${invQuote[CURR].open_rate_pct.toFixed(1)}%.`);
     }
     if (sqlSentDelta != null) {
-      items.push(`<strong>SQL volume genuinely dropped</strong> — confirmed three independent ways: SQL nurture email sends ${sqlSentDelta >= 0 ? "+" : ""}${sqlSentDelta.toFixed(0)}% May→June, Aimbase SQL delivery ${aimbaseSqlMom ? aimbaseSqlMom.mom_change : "↓"} MoM, and HubSpot enrollment snapshot showing ${Viz.fmtCommas(enroll["2027 - Score Based SQL Nurture"] || 0)} SQL vs ${Viz.fmtCommas(enroll["Leads - Exploring"] || 0)} Lead / ${Viz.fmtCommas(enroll["2027 - Score Based MQL Considering Nurture"] || 0)} MQL enrolled. Points to a lead-scoring/handoff question upstream of email.`);
+      const aimbaseClause = aimbaseSqlMom ? `, Aimbase SQL delivery ${aimbaseSqlMom.mom_change} MoM,` : ",";
+      items.push(`<strong>Watch SQL volume.</strong> SQL nurture email sends ${sqlSentDelta >= 0 ? "+" : ""}${sqlSentDelta.toFixed(0)}% ${prevShort}→${currShort}${aimbaseClause} and a HubSpot enrollment snapshot showing ${Viz.fmtCommas(enroll["2027 - Score Based SQL Nurture"] || 0)} SQL vs ${Viz.fmtCommas(enroll["Leads - Exploring"] || 0)} Lead / ${Viz.fmtCommas(enroll["2027 - Score Based MQL Considering Nurture"] || 0)} MQL enrolled — worth confirming this isn't a lead-scoring/handoff issue upstream of email.`);
     }
     const ul = document.getElementById("insights-list");
     ul.innerHTML = items.map((i) => `<li>${i}</li>`).join("");
@@ -205,7 +247,7 @@
   PERIODS.forEach((p) => {
     const opt = document.createElement("option");
     opt.value = p;
-    opt.textContent = SHORT_PERIOD[p] || p;
+    opt.textContent = periodLabel(p);
     periodFilterSel.appendChild(opt);
   });
 
@@ -268,7 +310,7 @@
       tr.appendChild(wfTd);
 
       const periodTd = document.createElement("td");
-      periodTd.innerHTML = `<span class="period-chip">${SHORT_PERIOD[period] || period}</span>`;
+      periodTd.innerHTML = `<span class="period-chip">${periodLabel(period)}</span>`;
       tr.appendChild(periodTd);
 
       const sentTd = document.createElement("td"); sentTd.className = "num"; sentTd.textContent = fmtInt(row.sent);
@@ -329,9 +371,9 @@
       const r = e.byPeriod[p];
       const tr2 = document.createElement("tr");
       if (!r) {
-        tr2.innerHTML = `<td>${SHORT_PERIOD[p] || p}</td><td colspan="6" style="text-align:left;color:var(--text-muted)">not sent this period</td>`;
+        tr2.innerHTML = `<td>${periodLabel(p)}</td><td colspan="6" style="text-align:left;color:var(--text-muted)">not sent this period</td>`;
       } else {
-        tr2.innerHTML = `<td>${SHORT_PERIOD[p] || p}</td><td>${fmtInt(r.sent)}</td><td>${fmtInt(r.est_delivered)}</td><td>${fmtInt(r.opened)}</td><td>${fmtPct(r.open_rate_pct)}</td><td>${fmtInt(r.clicked)}</td><td>${fmtPct(r.ctr_clicks_over_opens_pct)}</td><td>${fmtPct(r.bounce_rate_pct)}</td>`;
+        tr2.innerHTML = `<td>${periodLabel(p)}</td><td>${fmtInt(r.sent)}</td><td>${fmtInt(r.est_delivered)}</td><td>${fmtInt(r.opened)}</td><td>${fmtPct(r.open_rate_pct)}</td><td>${fmtInt(r.clicked)}</td><td>${fmtPct(r.ctr_clicks_over_opens_pct)}</td><td>${fmtPct(r.bounce_rate_pct)}</td>`;
       }
       tb.appendChild(tr2);
     });
@@ -349,7 +391,7 @@
           { name: "Open rate", color: seriesColor(0), values: PERIODS.map((p) => (e.byPeriod[p] ? e.byPeriod[p].open_rate_pct : null)) },
           { name: "CTR (clicks/opens)", color: seriesColor(1), values: PERIODS.map((p) => (e.byPeriod[p] ? e.byPeriod[p].ctr_clicks_over_opens_pct : null)) },
         ],
-        xLabels: PERIODS.map((p) => SHORT_PERIOD[p] || p),
+        xLabels: PERIODS.map((p) => periodLabel(p)),
         yFormat: (v) => v.toFixed(0) + "%",
         height: 200,
         yMaxOverride: 100,
@@ -360,15 +402,15 @@
   // -----------------------------------------------------------------
   // WORKFLOWS TAB
   // -----------------------------------------------------------------
-  const MAY = "NEW (May 8-Jun 3)", JUN = "NEW (June 4-30)";
+  const [PREV_WF, CURR_WF] = latestTwoWorkflowPeriods();
   const wfPerf = {};
   D.workflow_performance_by_period.forEach((r) => {
     wfPerf[r.workflow_name] = wfPerf[r.workflow_name] || {};
     wfPerf[r.workflow_name][r.period_label] = r;
   });
   const wfNamesByVolume = Object.keys(wfPerf).sort((a, b) => {
-    const av = (wfPerf[a][JUN] && wfPerf[a][JUN].sent) || 0;
-    const bv = (wfPerf[b][JUN] && wfPerf[b][JUN].sent) || 0;
+    const av = (CURR_WF && wfPerf[a][CURR_WF] && wfPerf[a][CURR_WF].sent) || 0;
+    const bv = (CURR_WF && wfPerf[b][CURR_WF] && wfPerf[b][CURR_WF].sent) || 0;
     return bv - av;
   });
 
@@ -376,8 +418,8 @@
     const container = document.getElementById("chart-workflow-openrate");
     const categories = wfNamesByVolume.map(shortName);
     const series = [
-      { name: "May 8–Jun 3", color: seriesColor(0), values: wfNamesByVolume.map((w) => (wfPerf[w][MAY] ? wfPerf[w][MAY].open_rate_pct : null)) },
-      { name: "Jun 4–30", color: seriesColor(1), values: wfNamesByVolume.map((w) => (wfPerf[w][JUN] ? wfPerf[w][JUN].open_rate_pct : null)) },
+      { name: periodLabel(PREV_WF), color: seriesColor(0), values: wfNamesByVolume.map((w) => (PREV_WF && wfPerf[w][PREV_WF] ? wfPerf[w][PREV_WF].open_rate_pct : null)) },
+      { name: periodLabel(CURR_WF), color: seriesColor(1), values: wfNamesByVolume.map((w) => (CURR_WF && wfPerf[w][CURR_WF] ? wfPerf[w][CURR_WF].open_rate_pct : null)) },
     ];
     Viz.groupedBarChart(container, { categories, series, yFormat: (v) => v.toFixed(0) + "%", height: 300, barMax: 16, yMaxOverride: 100 });
     const legend = document.getElementById("legend-workflow-openrate");
@@ -392,8 +434,8 @@
 
   function renderWorkflowMix() {
     const container = document.getElementById("chart-workflow-mix");
-    const periods = [MAY, JUN];
-    const categories = periods.map((p) => SHORT_PERIOD[p] || p);
+    const periods = [PREV_WF, CURR_WF].filter(Boolean);
+    const categories = periods.map((p) => periodLabel(p));
     const TOP_N = 7;
     const top = wfNamesByVolume.slice(0, TOP_N);
     const rest = wfNamesByVolume.slice(TOP_N);
@@ -441,9 +483,11 @@
     wrap.textContent = "";
     D.workflows.forEach((w) => {
       const perf = wfPerf[w.workflow_name] || {};
-      const mayOpen = perf[MAY] ? perf[MAY].open_rate_pct : null;
-      const junOpen = perf[JUN] ? perf[JUN].open_rate_pct : null;
-      const junSent = perf[JUN] ? perf[JUN].sent : null;
+      const prevOpen = PREV_WF && perf[PREV_WF] ? perf[PREV_WF].open_rate_pct : null;
+      const currOpen = CURR_WF && perf[CURR_WF] ? perf[CURR_WF].open_rate_pct : null;
+      const currSent = CURR_WF && perf[CURR_WF] ? perf[CURR_WF].sent : null;
+      const prevLabel = PREV_WF ? (periodLabel(PREV_WF)) : "prev";
+      const currLabel = CURR_WF ? (periodLabel(CURR_WF)) : "latest";
 
       const card = document.createElement("div");
       card.className = "workflow-card";
@@ -457,9 +501,9 @@
             </div>
           </div>
           <div class="workflow-card-stats">
-            <span>Jun sent <b>${junSent != null ? fmtInt(junSent) : "—"}</b></span>
-            <span>May open <b>${fmtPct(mayOpen)}</b></span>
-            <span>Jun open <b>${fmtPct(junOpen)}</b></span>
+            <span>${currLabel} sent <b>${currSent != null ? fmtInt(currSent) : "—"}</b></span>
+            <span>${prevLabel} open <b>${fmtPct(prevOpen)}</b></span>
+            <span>${currLabel} open <b>${fmtPct(currOpen)}</b></span>
           </div>
         </div>
         <div class="workflow-card-body">

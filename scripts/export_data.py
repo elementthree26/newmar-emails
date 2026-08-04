@@ -6,13 +6,15 @@ Run this whenever the source .db is refreshed:
 """
 import json
 import sqlite3
+import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from _period_utils import sorted_periods  # noqa: E402
+
 DB_PATH = ROOT / "data" / "newmar_email_ecosystem.db"
 OUT_PATH = ROOT / "assets" / "data.js"
-
-PERIOD_ORDER = ["OLD (Apr 11-May 7)", "NEW (May 8-Jun 3)", "NEW (June 4-30)"]
 
 
 def rows_as_dicts(cur, table, order_by=None):
@@ -28,8 +30,11 @@ def main():
     con = sqlite3.connect(DB_PATH)
     cur = con.cursor()
 
+    cur.execute("SELECT DISTINCT period_label FROM email_performance_by_period")
+    period_order = sorted_periods(r[0] for r in cur.fetchall())
+
     data = {
-        "period_order": PERIOD_ORDER,
+        "period_order": period_order,
         "workflows": rows_as_dicts(cur, "workflows", "workflow_name"),
         "suppression_lists": rows_as_dicts(cur, "suppression_lists", "list_id"),
         "workflow_suppression_map": rows_as_dicts(cur, "workflow_suppression_map"),
