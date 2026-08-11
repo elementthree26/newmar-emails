@@ -542,6 +542,113 @@
     });
   }
 
+  // -----------------------------------------------------------------
+  // Brochure model x model-year detail table (filterable)
+  // -----------------------------------------------------------------
+  function buildBrochureDetailRows() {
+    const periods = [PREV_WF, CURR_WF].filter(Boolean);
+    const rows = brochureEmailRows().filter((r) => MODEL_EMAIL_RE.test(r.email_name));
+    const byKey = {};
+    rows.forEach((r) => {
+      if (!periods.includes(r.period_label)) return;
+      const m = r.email_name.match(MODEL_EMAIL_RE);
+      const model = m[2].trim();
+      const key = model + "|" + m[1];
+      byKey[key] = byKey[key] || { model, my: m[1], prev: 0, curr: 0 };
+      if (r.period_label === PREV_WF) byKey[key].prev += r.sent || 0;
+      if (r.period_label === CURR_WF) byKey[key].curr += r.sent || 0;
+    });
+    return Object.values(byKey).map((r) => ({ ...r, delta: r.curr - r.prev }));
+  }
+
+  const brochureDetailRows = buildBrochureDetailRows();
+  const brochureMaxAbsDelta = Math.max(1, ...brochureDetailRows.map((r) => Math.abs(r.delta)));
+
+  const brochureModelFilterSel = document.getElementById("brochure-model-filter");
+  const brochureMyFilterSel = document.getElementById("brochure-my-filter");
+  const brochureSortMetricSel = document.getElementById("brochure-sort-metric");
+  const brochureSortDirBtn = document.getElementById("brochure-sort-dir");
+  const brochureDetailCountEl = document.getElementById("brochure-detail-count");
+  const brochureDetailBody = document.getElementById("brochure-detail-body");
+
+  if (brochureModelFilterSel) {
+    const modelNames = Array.from(new Set(brochureDetailRows.map((r) => r.model))).sort((a, b) => {
+      const av = brochureDetailRows.filter((r) => r.model === a).reduce((s, r) => s + r.curr, 0);
+      const bv = brochureDetailRows.filter((r) => r.model === b).reduce((s, r) => s + r.curr, 0);
+      return bv - av;
+    });
+    modelNames.forEach((m) => {
+      const opt = document.createElement("option");
+      opt.value = m;
+      opt.textContent = m;
+      brochureModelFilterSel.appendChild(opt);
+    });
+  }
+
+  let brochureSortDir = -1;
+  if (brochureSortDirBtn) {
+    brochureSortDirBtn.addEventListener("click", () => {
+      brochureSortDir *= -1;
+      brochureSortDirBtn.textContent = brochureSortDir === -1 ? "↓ Desc" : "↑ Asc";
+      renderBrochureDetailTable();
+    });
+    [brochureModelFilterSel, brochureMyFilterSel, brochureSortMetricSel].forEach((el) => el && el.addEventListener("change", renderBrochureDetailTable));
+  }
+
+  function renderBrochureDetailTable() {
+    if (!brochureDetailBody) return;
+    const modelVal = brochureModelFilterSel.value;
+    const myVal = brochureMyFilterSel.value;
+    const metric = brochureSortMetricSel.value;
+
+    let rows = brochureDetailRows
+      .filter((r) => !modelVal || r.model === modelVal)
+      .filter((r) => !myVal || r.my === myVal);
+
+    rows = rows.slice().sort((a, b) => {
+      const key = metric === "deltaAbs" ? (r) => Math.abs(r.delta) : (r) => r[metric];
+      return (key(a) - key(b)) * brochureSortDir;
+    });
+
+    brochureDetailCountEl.textContent = `${rows.length} row${rows.length === 1 ? "" : "s"}`;
+    brochureDetailBody.textContent = "";
+
+    rows.forEach((r) => {
+      const tr = document.createElement("tr");
+      const nameTd = document.createElement("td");
+      nameTd.className = "email-name";
+      nameTd.textContent = r.model;
+      const myTd = document.createElement("td");
+      const chip = document.createElement("span");
+      chip.className = "workflow-chip";
+      chip.textContent = r.my;
+      myTd.appendChild(chip);
+      const prevTd = document.createElement("td"); prevTd.className = "num"; prevTd.textContent = fmtInt(r.prev);
+      const currTd = document.createElement("td"); currTd.className = "num"; currTd.textContent = fmtInt(r.curr);
+      const deltaTd = document.createElement("td"); deltaTd.className = "num";
+      deltaTd.textContent = (r.delta >= 0 ? "+" : "") + fmtInt(r.delta);
+
+      const barTd = document.createElement("td");
+      const cell = document.createElement("div");
+      cell.className = "change-bar-cell";
+      const track = document.createElement("div");
+      track.className = "change-bar-track";
+      const center = document.createElement("div");
+      center.className = "change-bar-center";
+      track.appendChild(center);
+      const fill = document.createElement("div");
+      fill.className = "change-bar-fill " + (r.delta >= 0 ? "up" : "down");
+      const pct = (Math.abs(r.delta) / brochureMaxAbsDelta) * 50;
+      fill.style.width = pct + "%";
+      track.appendChild(fill);
+      cell.appendChild(track);
+      barTd.appendChild(cell);
+
+      tr.appendChild(nameTd); tr.appendChild(myTd); tr.appendChild(prevTd); tr.appendChild(currTd); tr.appendChild(deltaTd); tr.appendChild(barTd);
+      brochureDetailBody.appendChild(tr);
+    });
+  }
+
   function renderEnrollmentSnapshot() {
     const strip = document.getElementById("enrollment-snapshot");
     strip.textContent = "";
@@ -615,6 +722,7 @@
     renderWorkflowMix();
     renderBrochureByModelYear();
     renderBrochureByModel();
+    renderBrochureDetailTable();
     renderEnrollmentSnapshot();
     renderWorkflowCards();
   }

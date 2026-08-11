@@ -137,6 +137,55 @@
 
         <div class="card">
           <div class="card-head">
+            <h2>Brochure Downloads — model &amp; model-year detail</h2>
+            <p class="card-sub">Every model × model-year combination, filterable — this is the source data behind the two charts above</p>
+          </div>
+          <div class="filter-row">
+            <div class="filter-field">
+              <label for="brochure-model-filter">Model</label>
+              <select id="brochure-model-filter">
+                <option value="">All models</option>
+              </select>
+            </div>
+            <div class="filter-field">
+              <label for="brochure-my-filter">Model year</label>
+              <select id="brochure-my-filter">
+                <option value="">All</option>
+                <option value="MY26">MY26</option>
+                <option value="MY27">MY27</option>
+              </select>
+            </div>
+            <div class="filter-field">
+              <label for="brochure-sort-metric">Sort by</label>
+              <select id="brochure-sort-metric">
+                <option value="curr">Latest period sends</option>
+                <option value="prev">Prior period sends</option>
+                <option value="delta">Change</option>
+                <option value="deltaAbs">Change (absolute size)</option>
+              </select>
+            </div>
+            <button id="brochure-sort-dir" class="sort-dir-btn" type="button" title="Toggle sort direction">↓ Desc</button>
+            <div class="filter-count" id="brochure-detail-count"></div>
+          </div>
+          <div class="card-table" style="border:none;">
+            <table class="data-table" id="brochure-detail-table">
+              <thead>
+                <tr>
+                  <th class="col-name">Model</th>
+                  <th class="col-workflow">Model year</th>
+                  <th class="num">Prior period</th>
+                  <th class="num">Latest period</th>
+                  <th class="num">Change</th>
+                  <th>Change</th>
+                </tr>
+              </thead>
+              <tbody id="brochure-detail-body"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-head">
             <h2>Workflow enrollment snapshot</h2>
             <p class="card-sub">Point-in-time HubSpot enrollment counts — corroborates the SQL volume story independent of email sends</p>
           </div>

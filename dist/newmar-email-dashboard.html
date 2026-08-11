@@ -407,6 +407,16 @@ p { margin: 0; }
 }
 .period-chip { font-size: 11.5px; color: var(--text-muted); white-space: nowrap; }
 
+.change-bar-cell { display: flex; align-items: center; gap: 8px; min-width: 160px; }
+.change-bar-track { position: relative; flex: 1 1 auto; height: 8px; background: var(--gridline); border-radius: 4px; overflow: hidden; }
+.change-bar-fill { position: absolute; top: 0; bottom: 0; border-radius: 4px; }
+.change-bar-fill.up { background: var(--good); left: 50%; }
+.change-bar-fill.down { background: var(--critical); right: 50%; }
+.change-bar-center { position: absolute; top: -2px; bottom: -2px; left: 50%; width: 1px; background: var(--baseline); }
+.change-bar-value { font-size: 12px; font-weight: 600; white-space: nowrap; min-width: 58px; text-align: right; font-variant-numeric: tabular-nums; }
+.change-bar-value.up { color: var(--good); }
+.change-bar-value.down { color: var(--critical); }
+
 .detail-row td { background: color-mix(in srgb, var(--series-1) 4%, var(--surface-1)); padding: 16px 20px; }
 .detail-grid { display: flex; gap: 24px; flex-wrap: wrap; align-items: flex-start; }
 .detail-chart { flex: 1 1 320px; min-width: 280px; }
@@ -641,6 +651,55 @@ p { margin: 0; }
           </div>
           <div id="chart-brochure-bymodel" class="chart-slot"></div>
           <div id="legend-brochure-bymodel" class="chart-legend"></div>
+        </div>
+
+        <div class="card">
+          <div class="card-head">
+            <h2>Brochure Downloads — model &amp; model-year detail</h2>
+            <p class="card-sub">Every model × model-year combination, filterable — this is the source data behind the two charts above</p>
+          </div>
+          <div class="filter-row">
+            <div class="filter-field">
+              <label for="brochure-model-filter">Model</label>
+              <select id="brochure-model-filter">
+                <option value="">All models</option>
+              </select>
+            </div>
+            <div class="filter-field">
+              <label for="brochure-my-filter">Model year</label>
+              <select id="brochure-my-filter">
+                <option value="">All</option>
+                <option value="MY26">MY26</option>
+                <option value="MY27">MY27</option>
+              </select>
+            </div>
+            <div class="filter-field">
+              <label for="brochure-sort-metric">Sort by</label>
+              <select id="brochure-sort-metric">
+                <option value="curr">Latest period sends</option>
+                <option value="prev">Prior period sends</option>
+                <option value="delta">Change</option>
+                <option value="deltaAbs">Change (absolute size)</option>
+              </select>
+            </div>
+            <button id="brochure-sort-dir" class="sort-dir-btn" type="button" title="Toggle sort direction">↓ Desc</button>
+            <div class="filter-count" id="brochure-detail-count"></div>
+          </div>
+          <div class="card-table" style="border:none;">
+            <table class="data-table" id="brochure-detail-table">
+              <thead>
+                <tr>
+                  <th class="col-name">Model</th>
+                  <th class="col-workflow">Model year</th>
+                  <th class="num">Prior period</th>
+                  <th class="num">Latest period</th>
+                  <th class="num">Change</th>
+                  <th>Change</th>
+                </tr>
+              </thead>
+              <tbody id="brochure-detail-body"></tbody>
+            </table>
+          </div>
         </div>
 
         <div class="card">
@@ -6906,6 +6965,113 @@ window.NEWMAR_DATA = {
     });
   }
 
+  // -----------------------------------------------------------------
+  // Brochure model x model-year detail table (filterable)
+  // -----------------------------------------------------------------
+  function buildBrochureDetailRows() {
+    const periods = [PREV_WF, CURR_WF].filter(Boolean);
+    const rows = brochureEmailRows().filter((r) => MODEL_EMAIL_RE.test(r.email_name));
+    const byKey = {};
+    rows.forEach((r) => {
+      if (!periods.includes(r.period_label)) return;
+      const m = r.email_name.match(MODEL_EMAIL_RE);
+      const model = m[2].trim();
+      const key = model + "|" + m[1];
+      byKey[key] = byKey[key] || { model, my: m[1], prev: 0, curr: 0 };
+      if (r.period_label === PREV_WF) byKey[key].prev += r.sent || 0;
+      if (r.period_label === CURR_WF) byKey[key].curr += r.sent || 0;
+    });
+    return Object.values(byKey).map((r) => ({ ...r, delta: r.curr - r.prev }));
+  }
+
+  const brochureDetailRows = buildBrochureDetailRows();
+  const brochureMaxAbsDelta = Math.max(1, ...brochureDetailRows.map((r) => Math.abs(r.delta)));
+
+  const brochureModelFilterSel = document.getElementById("brochure-model-filter");
+  const brochureMyFilterSel = document.getElementById("brochure-my-filter");
+  const brochureSortMetricSel = document.getElementById("brochure-sort-metric");
+  const brochureSortDirBtn = document.getElementById("brochure-sort-dir");
+  const brochureDetailCountEl = document.getElementById("brochure-detail-count");
+  const brochureDetailBody = document.getElementById("brochure-detail-body");
+
+  if (brochureModelFilterSel) {
+    const modelNames = Array.from(new Set(brochureDetailRows.map((r) => r.model))).sort((a, b) => {
+      const av = brochureDetailRows.filter((r) => r.model === a).reduce((s, r) => s + r.curr, 0);
+      const bv = brochureDetailRows.filter((r) => r.model === b).reduce((s, r) => s + r.curr, 0);
+      return bv - av;
+    });
+    modelNames.forEach((m) => {
+      const opt = document.createElement("option");
+      opt.value = m;
+      opt.textContent = m;
+      brochureModelFilterSel.appendChild(opt);
+    });
+  }
+
+  let brochureSortDir = -1;
+  if (brochureSortDirBtn) {
+    brochureSortDirBtn.addEventListener("click", () => {
+      brochureSortDir *= -1;
+      brochureSortDirBtn.textContent = brochureSortDir === -1 ? "↓ Desc" : "↑ Asc";
+      renderBrochureDetailTable();
+    });
+    [brochureModelFilterSel, brochureMyFilterSel, brochureSortMetricSel].forEach((el) => el && el.addEventListener("change", renderBrochureDetailTable));
+  }
+
+  function renderBrochureDetailTable() {
+    if (!brochureDetailBody) return;
+    const modelVal = brochureModelFilterSel.value;
+    const myVal = brochureMyFilterSel.value;
+    const metric = brochureSortMetricSel.value;
+
+    let rows = brochureDetailRows
+      .filter((r) => !modelVal || r.model === modelVal)
+      .filter((r) => !myVal || r.my === myVal);
+
+    rows = rows.slice().sort((a, b) => {
+      const key = metric === "deltaAbs" ? (r) => Math.abs(r.delta) : (r) => r[metric];
+      return (key(a) - key(b)) * brochureSortDir;
+    });
+
+    brochureDetailCountEl.textContent = `${rows.length} row${rows.length === 1 ? "" : "s"}`;
+    brochureDetailBody.textContent = "";
+
+    rows.forEach((r) => {
+      const tr = document.createElement("tr");
+      const nameTd = document.createElement("td");
+      nameTd.className = "email-name";
+      nameTd.textContent = r.model;
+      const myTd = document.createElement("td");
+      const chip = document.createElement("span");
+      chip.className = "workflow-chip";
+      chip.textContent = r.my;
+      myTd.appendChild(chip);
+      const prevTd = document.createElement("td"); prevTd.className = "num"; prevTd.textContent = fmtInt(r.prev);
+      const currTd = document.createElement("td"); currTd.className = "num"; currTd.textContent = fmtInt(r.curr);
+      const deltaTd = document.createElement("td"); deltaTd.className = "num";
+      deltaTd.textContent = (r.delta >= 0 ? "+" : "") + fmtInt(r.delta);
+
+      const barTd = document.createElement("td");
+      const cell = document.createElement("div");
+      cell.className = "change-bar-cell";
+      const track = document.createElement("div");
+      track.className = "change-bar-track";
+      const center = document.createElement("div");
+      center.className = "change-bar-center";
+      track.appendChild(center);
+      const fill = document.createElement("div");
+      fill.className = "change-bar-fill " + (r.delta >= 0 ? "up" : "down");
+      const pct = (Math.abs(r.delta) / brochureMaxAbsDelta) * 50;
+      fill.style.width = pct + "%";
+      track.appendChild(fill);
+      cell.appendChild(track);
+      barTd.appendChild(cell);
+
+      tr.appendChild(nameTd); tr.appendChild(myTd); tr.appendChild(prevTd); tr.appendChild(currTd); tr.appendChild(deltaTd); tr.appendChild(barTd);
+      brochureDetailBody.appendChild(tr);
+    });
+  }
+
   function renderEnrollmentSnapshot() {
     const strip = document.getElementById("enrollment-snapshot");
     strip.textContent = "";
@@ -6979,6 +7145,7 @@ window.NEWMAR_DATA = {
     renderWorkflowMix();
     renderBrochureByModelYear();
     renderBrochureByModel();
+    renderBrochureDetailTable();
     renderEnrollmentSnapshot();
     renderWorkflowCards();
   }
