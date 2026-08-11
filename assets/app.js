@@ -506,7 +506,7 @@
     const rows = brochureEmailRows();
 
     const byModel = {};
-    let sharedByPeriod = {};
+    const sharedByPeriod = {};
     periods.forEach((p) => { sharedByPeriod[p] = 0; });
     rows.forEach((r) => {
       if (!periods.includes(r.period_label)) return;
@@ -517,26 +517,23 @@
       byModel[model][r.period_label] = (byModel[model][r.period_label] || 0) + (r.sent || 0);
     });
 
+    // Every model gets its own labeled row — identity comes from the row
+    // label, not color, so this scales past the ~8-hue categorical limit
+    // without folding anything into "Other."
     const modelNames = Object.keys(byModel).sort((a, b) => {
       const av = (CURR_WF && byModel[a][CURR_WF]) || 0;
       const bv = (CURR_WF && byModel[b][CURR_WF]) || 0;
       return bv - av;
     });
-    const TOP_N = 7;
-    const top = modelNames.slice(0, TOP_N);
-    const rest = modelNames.slice(TOP_N);
+    const categories = [...modelNames, "Shared (Next Steps + Engagement)"];
 
-    const series = top.map((model, i) => ({
-      name: model,
+    const series = periods.map((p, i) => ({
+      name: periodLabel(p),
       color: seriesColor(i),
-      values: periods.map((p) => (byModel[model][p] || 0)),
+      values: [...modelNames.map((model) => byModel[model][p] || 0), sharedByPeriod[p]],
     }));
-    const restPlusShared = periods.map((p) => rest.reduce((a, model) => a + (byModel[model][p] || 0), 0) + sharedByPeriod[p]);
-    if (rest.length || restPlusShared.some((v) => v > 0)) {
-      series.push({ name: "Other (incl. shared closing email)", color: OTHER_COLOR(), values: restPlusShared });
-    }
 
-    Viz.stackedBarChart(container, { categories: periods.map((p) => periodLabel(p)), series, height: 300, mode: "absolute" });
+    Viz.horizontalGroupedBarChart(container, { categories, series, rowHeight: 30, barMax: 11 });
 
     const legend = document.getElementById("legend-brochure-bymodel");
     legend.textContent = "";

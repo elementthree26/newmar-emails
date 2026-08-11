@@ -469,6 +469,89 @@
     container.appendChild(svg);
   }
 
+  // ---- horizontal grouped bar chart --------------------------------------
+  // For categorical lists too long to color-code (identity carried by the
+  // row label, not hue) — e.g. every product model, ranked. Height grows
+  // with the number of categories rather than squeezing them into a fixed box.
+  // opts: { categories:[str], series:[{name,color,values}], yFormat(v), rowHeight, barMax }
+  function horizontalGroupedBarChart(container, opts) {
+    container.textContent = "";
+    const width = container.clientWidth || 640;
+    const rowHeight = opts.rowHeight || 34;
+    const marginL = 132, marginR = 56, marginT = 12, marginB = 28;
+    const innerW = width - marginL - marginR;
+    const n = opts.categories.length;
+    const innerH = rowHeight * n;
+    const height = innerH + marginT + marginB;
+    const yFormat = opts.yFormat || ((v) => fmtCommas(v));
+
+    const allVals = opts.series.flatMap((s) => s.values.filter((v) => v != null));
+    const dataMax = allVals.length ? Math.max(...allVals) : 1;
+    const xMax = niceMax(dataMax * 1.15);
+
+    const svg = el("svg", { viewBox: `0 0 ${width} ${height}`, width: "100%", height });
+    const gridlineColor = cssVar("--gridline");
+    const mutedColor = cssVar("--text-muted");
+    const primaryColor = cssVar("--text-primary");
+    const baselineColor = cssVar("--baseline");
+
+    const steps = 4;
+    for (let i = 0; i <= steps; i++) {
+      const v = (xMax / steps) * i;
+      const x = marginL + (v / xMax) * innerW;
+      svg.appendChild(el("line", {
+        x1: x, x2: x, y1: marginT, y2: marginT + innerH,
+        stroke: i === 0 ? baselineColor : gridlineColor, "stroke-width": 1,
+      }));
+      const label = el("text", { x, y: marginT + innerH + 18, "text-anchor": "middle", fill: mutedColor, "font-size": 11 });
+      label.textContent = yFormat(v);
+      svg.appendChild(label);
+    }
+
+    const nSeries = opts.series.length;
+    const barGap = 3;
+    const groupPad = 6;
+    const barH = Math.min(opts.barMax || 12, (rowHeight - groupPad * 2 - barGap * (nSeries - 1)) / nSeries);
+    const groupContentH = barH * nSeries + barGap * (nSeries - 1);
+
+    opts.categories.forEach((cat, ci) => {
+      const rowY = marginT + rowHeight * ci;
+      const groupY = rowY + (rowHeight - groupContentH) / 2;
+
+      const label = el("text", {
+        x: marginL - 10, y: rowY + rowHeight / 2 + 4, "text-anchor": "end", fill: primaryColor, "font-size": 12,
+      });
+      const text = String(cat);
+      label.textContent = text.length > 20 ? text.slice(0, 19) + "…" : text;
+      if (text.length > 20) {
+        const t = el("title");
+        t.textContent = text;
+        label.appendChild(t);
+      }
+      svg.appendChild(label);
+
+      opts.series.forEach((s, si) => {
+        const v = s.values[ci];
+        if (v == null) return;
+        const y = groupY + si * (barH + barGap);
+        const barW = Math.max((v / xMax) * innerW, 1);
+        const rect = el("rect", { x: marginL, y, width: barW, height: barH, fill: s.color, rx: 3, ry: 3 });
+        rect.addEventListener("pointerenter", (e) => { rect.setAttribute("opacity", 0.82); showTooltip(e.clientX, e.clientY, cat, [{ color: s.color, label: s.name, value: yFormat(v) }]); });
+        rect.addEventListener("pointermove", (e) => showTooltip(e.clientX, e.clientY, cat, [{ color: s.color, label: s.name, value: yFormat(v) }]));
+        rect.addEventListener("pointerleave", () => { rect.setAttribute("opacity", 1); hideTooltip(); });
+        svg.appendChild(rect);
+
+        const valueLabel = el("text", {
+          x: marginL + barW + 6, y: y + barH / 2 + 4, "text-anchor": "start", fill: mutedColor, "font-size": 11,
+        });
+        valueLabel.textContent = yFormat(v);
+        svg.appendChild(valueLabel);
+      });
+    });
+
+    container.appendChild(svg);
+  }
+
   // ---- sparkline ---------------------------------------------------------
   // opts: { values:[num|null], color, accentColor, width, height }
   function sparkline(container, opts) {
@@ -511,5 +594,5 @@
     container.appendChild(svg);
   }
 
-  global.Viz = { lineChart, comboBarLineChart, groupedBarChart, stackedBarChart, sparkline, fmtCommas, showTooltip, hideTooltip };
+  global.Viz = { lineChart, comboBarLineChart, groupedBarChart, stackedBarChart, horizontalGroupedBarChart, sparkline, fmtCommas, showTooltip, hideTooltip };
 })(window);
