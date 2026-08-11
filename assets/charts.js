@@ -78,6 +78,7 @@
     let step;
     if (norm <= 1) step = 1;
     else if (norm <= 2) step = 2;
+    else if (norm <= 2.5) step = 2.5;
     else if (norm <= 5) step = 5;
     else step = 10;
     return step * mag;
