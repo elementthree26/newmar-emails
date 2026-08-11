@@ -6832,21 +6832,21 @@ window.NEWMAR_DATA = {
   function renderBrochureByModelYear() {
     const container = document.getElementById("chart-brochure-modelyear");
     const periods = [PREV_WF, CURR_WF].filter(Boolean);
-    const rows = brochureEmailRows();
+    // Excludes the shared "Next Steps + Engagement" closing email, which isn't
+    // tied to one model year — it's the same email across every model's drip.
+    const rows = brochureEmailRows().filter((r) => MODEL_EMAIL_RE.test(r.email_name));
 
-    const totals = { MY26: {}, MY27: {}, Shared: {} };
-    periods.forEach((p) => { totals.MY26[p] = 0; totals.MY27[p] = 0; totals.Shared[p] = 0; });
+    const totals = { MY26: {}, MY27: {} };
+    periods.forEach((p) => { totals.MY26[p] = 0; totals.MY27[p] = 0; });
     rows.forEach((r) => {
       if (!periods.includes(r.period_label)) return;
       const m = r.email_name.match(MODEL_EMAIL_RE);
-      const bucket = m ? m[1] : "Shared";
-      totals[bucket][r.period_label] += r.sent || 0;
+      totals[m[1]][r.period_label] += r.sent || 0;
     });
 
     const series = [
       { name: "MY26", color: seriesColor(0), values: periods.map((p) => totals.MY26[p]) },
       { name: "MY27", color: seriesColor(1), values: periods.map((p) => totals.MY27[p]) },
-      { name: "Shared (Next Steps + Engagement)", color: OTHER_COLOR(), values: periods.map((p) => totals.Shared[p]) },
     ];
     Viz.stackedBarChart(container, { categories: periods.map((p) => periodLabel(p)), series, height: 300, mode: "absolute" });
 
@@ -6863,16 +6863,14 @@ window.NEWMAR_DATA = {
   function renderBrochureByModel() {
     const container = document.getElementById("chart-brochure-bymodel");
     const periods = [PREV_WF, CURR_WF].filter(Boolean);
-    const rows = brochureEmailRows();
+    // Excludes the shared "Next Steps + Engagement" closing email — it isn't
+    // one model, it's the same email sent across every model's drip.
+    const rows = brochureEmailRows().filter((r) => MODEL_EMAIL_RE.test(r.email_name));
 
     const byModel = {};
-    const sharedByPeriod = {};
-    periods.forEach((p) => { sharedByPeriod[p] = 0; });
     rows.forEach((r) => {
       if (!periods.includes(r.period_label)) return;
-      const m = r.email_name.match(MODEL_EMAIL_RE);
-      if (!m) { sharedByPeriod[r.period_label] += r.sent || 0; return; }
-      const model = m[2].trim();
+      const model = r.email_name.match(MODEL_EMAIL_RE)[2].trim();
       byModel[model] = byModel[model] || {};
       byModel[model][r.period_label] = (byModel[model][r.period_label] || 0) + (r.sent || 0);
     });
@@ -6880,17 +6878,16 @@ window.NEWMAR_DATA = {
     // Every model gets its own labeled row — identity comes from the row
     // label, not color, so this scales past the ~8-hue categorical limit
     // without folding anything into "Other."
-    const modelNames = Object.keys(byModel).sort((a, b) => {
+    const categories = Object.keys(byModel).sort((a, b) => {
       const av = (CURR_WF && byModel[a][CURR_WF]) || 0;
       const bv = (CURR_WF && byModel[b][CURR_WF]) || 0;
       return bv - av;
     });
-    const categories = [...modelNames, "Shared (Next Steps + Engagement)"];
 
     const series = periods.map((p, i) => ({
       name: periodLabel(p),
       color: seriesColor(i),
-      values: [...modelNames.map((model) => byModel[model][p] || 0), sharedByPeriod[p]],
+      values: categories.map((model) => byModel[model][p] || 0),
     }));
 
     Viz.horizontalGroupedBarChart(container, { categories, series, rowHeight: 30, barMax: 11 });
