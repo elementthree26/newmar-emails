@@ -462,6 +462,92 @@
     });
   }
 
+  const BROCHURE_WORKFLOW = "2027 Brochure Downloads (per-model)";
+  const MODEL_EMAIL_RE = /^(MY2[67])[:\s-]*(.+?)\s*(?:-|:)?\s*Email\s*\d/;
+
+  function brochureEmailRows() {
+    return D.email_performance_by_period.filter((r) => r.workflow_name === BROCHURE_WORKFLOW);
+  }
+
+  function renderBrochureByModelYear() {
+    const container = document.getElementById("chart-brochure-modelyear");
+    const periods = [PREV_WF, CURR_WF].filter(Boolean);
+    const rows = brochureEmailRows();
+
+    const totals = { MY26: {}, MY27: {}, Shared: {} };
+    periods.forEach((p) => { totals.MY26[p] = 0; totals.MY27[p] = 0; totals.Shared[p] = 0; });
+    rows.forEach((r) => {
+      if (!periods.includes(r.period_label)) return;
+      const m = r.email_name.match(MODEL_EMAIL_RE);
+      const bucket = m ? m[1] : "Shared";
+      totals[bucket][r.period_label] += r.sent || 0;
+    });
+
+    const series = [
+      { name: "MY26", color: seriesColor(0), values: periods.map((p) => totals.MY26[p]) },
+      { name: "MY27", color: seriesColor(1), values: periods.map((p) => totals.MY27[p]) },
+      { name: "Shared (Next Steps + Engagement)", color: OTHER_COLOR(), values: periods.map((p) => totals.Shared[p]) },
+    ];
+    Viz.stackedBarChart(container, { categories: periods.map((p) => periodLabel(p)), series, height: 300, mode: "absolute" });
+
+    const legend = document.getElementById("legend-brochure-modelyear");
+    legend.textContent = "";
+    series.forEach((s) => {
+      const item = document.createElement("span");
+      item.className = "legend-item";
+      item.innerHTML = `<span class="legend-swatch dot" style="background:${s.color}"></span>${s.name}`;
+      legend.appendChild(item);
+    });
+  }
+
+  function renderBrochureByModel() {
+    const container = document.getElementById("chart-brochure-bymodel");
+    const periods = [PREV_WF, CURR_WF].filter(Boolean);
+    const rows = brochureEmailRows();
+
+    const byModel = {};
+    let sharedByPeriod = {};
+    periods.forEach((p) => { sharedByPeriod[p] = 0; });
+    rows.forEach((r) => {
+      if (!periods.includes(r.period_label)) return;
+      const m = r.email_name.match(MODEL_EMAIL_RE);
+      if (!m) { sharedByPeriod[r.period_label] += r.sent || 0; return; }
+      const model = m[2].trim();
+      byModel[model] = byModel[model] || {};
+      byModel[model][r.period_label] = (byModel[model][r.period_label] || 0) + (r.sent || 0);
+    });
+
+    const modelNames = Object.keys(byModel).sort((a, b) => {
+      const av = (CURR_WF && byModel[a][CURR_WF]) || 0;
+      const bv = (CURR_WF && byModel[b][CURR_WF]) || 0;
+      return bv - av;
+    });
+    const TOP_N = 7;
+    const top = modelNames.slice(0, TOP_N);
+    const rest = modelNames.slice(TOP_N);
+
+    const series = top.map((model, i) => ({
+      name: model,
+      color: seriesColor(i),
+      values: periods.map((p) => (byModel[model][p] || 0)),
+    }));
+    const restPlusShared = periods.map((p) => rest.reduce((a, model) => a + (byModel[model][p] || 0), 0) + sharedByPeriod[p]);
+    if (rest.length || restPlusShared.some((v) => v > 0)) {
+      series.push({ name: "Other (incl. shared closing email)", color: OTHER_COLOR(), values: restPlusShared });
+    }
+
+    Viz.stackedBarChart(container, { categories: periods.map((p) => periodLabel(p)), series, height: 300, mode: "absolute" });
+
+    const legend = document.getElementById("legend-brochure-bymodel");
+    legend.textContent = "";
+    series.forEach((s) => {
+      const item = document.createElement("span");
+      item.className = "legend-item";
+      item.innerHTML = `<span class="legend-swatch dot" style="background:${s.color}"></span>${s.name}`;
+      legend.appendChild(item);
+    });
+  }
+
   function renderEnrollmentSnapshot() {
     const strip = document.getElementById("enrollment-snapshot");
     strip.textContent = "";
@@ -533,6 +619,8 @@
     renderEmailTable();
     renderWorkflowOpenRate();
     renderWorkflowMix();
+    renderBrochureByModelYear();
+    renderBrochureByModel();
     renderEnrollmentSnapshot();
     renderWorkflowCards();
   }
@@ -541,6 +629,8 @@
     renderProgramCombo();
     renderWorkflowOpenRate();
     renderWorkflowMix();
+    renderBrochureByModelYear();
+    renderBrochureByModel();
   };
 
   renderAll();
