@@ -130,13 +130,11 @@
     if (!curr) return;
     const prev = prevP ? programByPeriod[prevP] : null;
     const currLabel = periodLabel(currP);
-    const prevLabel = prevP ? periodLabel(prevP) : null;
 
     const tiles = [
-      { label: `Email open rate (${currLabel})`, value: fmtPct(curr.open_rate_pct), curKey: "open_rate_pct", kind: "pts", goodUp: true },
-      { label: `Click rate, clicks/delivered (${currLabel})`, value: fmtPct(curr.click_rate_clicks_over_delivered_pct), curKey: "click_rate_clicks_over_delivered_pct", kind: "pts", goodUp: true },
-      { label: `CTR, clicks/opens (${currLabel})`, value: fmtPct(curr.ctr_clicks_over_opens_pct), curKey: "ctr_clicks_over_opens_pct", kind: "pts", goodUp: true },
       { label: `Total sends (${currLabel})`, value: fmtInt(curr.total_sends), curKey: "total_sends", kind: "pct", goodUp: true },
+      { label: `Email open rate (${currLabel})`, value: fmtPct(curr.open_rate_pct), curKey: "open_rate_pct", kind: "pts", goodUp: true },
+      { label: `CTR (Clicks/Opens) (${currLabel})`, value: fmtPct(curr.ctr_clicks_over_opens_pct), curKey: "ctr_clicks_over_opens_pct", kind: "pts", goodUp: true },
     ];
 
     tiles.forEach((t) => {
@@ -152,7 +150,7 @@
           const dClass = (delta >= 0) === t.goodUp ? "up" : "down";
           const arrow = delta >= 0 ? "↑ " : "↓ ";
           const amount = t.kind === "pts" ? `${sign}${delta.toFixed(1)} pts` : `${sign}${Math.round(delta)}%`;
-          deltaHtml = `<div class="kpi-delta ${dClass}">${arrow}${amount} vs ${prevLabel}</div>`;
+          deltaHtml = `<div class="kpi-delta ${dClass}">${arrow}${amount} vs MoM</div>`;
         }
       }
       div.innerHTML = `
