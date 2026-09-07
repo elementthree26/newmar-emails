@@ -129,12 +129,11 @@
     row.textContent = "";
     if (!curr) return;
     const prev = prevP ? programByPeriod[prevP] : null;
-    const currLabel = periodLabel(currP);
 
     const tiles = [
-      { label: `Total sends (${currLabel})`, value: fmtInt(curr.total_sends), curKey: "total_sends", kind: "pct", goodUp: true },
-      { label: `Email open rate (${currLabel})`, value: fmtPct(curr.open_rate_pct), curKey: "open_rate_pct", kind: "pts", goodUp: true },
-      { label: `CTR (Clicks/Opens) (${currLabel})`, value: fmtPct(curr.ctr_clicks_over_opens_pct), curKey: "ctr_clicks_over_opens_pct", kind: "pts", goodUp: true },
+      { label: "Total sends", value: fmtInt(curr.total_sends), curKey: "total_sends", kind: "pct", goodUp: true },
+      { label: "Email open rate", value: fmtPct(curr.open_rate_pct), curKey: "open_rate_pct", kind: "pts", goodUp: true },
+      { label: "CTR (Clicks/Opens)", value: fmtPct(curr.ctr_clicks_over_opens_pct), curKey: "ctr_clicks_over_opens_pct", kind: "pts", goodUp: true },
     ];
 
     tiles.forEach((t) => {
