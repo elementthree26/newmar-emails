@@ -8699,19 +8699,21 @@ window.NEWMAR_DATA = {
     });
   }
 
+  // Fixed bottom-to-top stacking order (per explicit request), not
+  // volume-sorted like the rest of this file's charts.
+  const MIX_LEADS_WF = "Leads - Exploring";
+  const MIX_MQL_WF = "2027 - Score Based MQL Considering Nurture";
+  const MIX_SQL_WF = "2027 - Score Based SQL Nurture";
+  const MIX_RESORTS_WF = "2027 - Resorts Guide Nurture";
+
   function renderWorkflowMix() {
     const container = document.getElementById("chart-workflow-mix");
     const periods = GRAPH_WF_PERIODS;
     const categories = periods.map(monthLabel);
 
-    // Brochure Downloads gets split into its own MY26/MY27 segments (two
-    // shades of blue) instead of one workflow-level segment, so it takes 2
-    // of the 8 available hues instead of 1 — the other workflows are
-    // trimmed to top 5 (+ Other) to stay within the categorical-color limit.
-    const nonBrochureWf = wfNamesByVolume.filter((w) => w !== BROCHURE_WORKFLOW);
-    const TOP_N = 5;
-    const top = nonBrochureWf.slice(0, TOP_N);
-    const rest = nonBrochureWf.slice(TOP_N);
+    function sentFor(w, p) {
+      return (wfPerf[w] && wfPerf[w][p] && wfPerf[w][p].sent) || 0;
+    }
 
     const brochureModelRows = brochureEmailRows().filter((r) => MODEL_EMAIL_RE.test(r.email_name));
     const my26 = {}, my27 = {};
@@ -8722,29 +8724,33 @@ window.NEWMAR_DATA = {
       (my === "MY26" ? my26 : my27)[r.period_label] += r.sent || 0;
     });
     // Any Brochure Downloads volume not tied to one model year (the shared
-    // "Next Steps + Engagement" close-out email) folds into Other rather
-    // than being guessed at — it genuinely isn't MY26 or MY27 volume.
+    // "Next Steps + Engagement" close-out email) folds into the catch-all
+    // bucket rather than being guessed at — it genuinely isn't MY26 or MY27.
     function brochureUnattributed(p) {
-      const total = (wfPerf[BROCHURE_WORKFLOW] && wfPerf[BROCHURE_WORKFLOW][p] && wfPerf[BROCHURE_WORKFLOW][p].sent) || 0;
-      return Math.max(0, total - my26[p] - my27[p]);
+      return Math.max(0, sentFor(BROCHURE_WORKFLOW, p) - my26[p] - my27[p]);
     }
 
+    // Everything not named individually below — the small behavior-triggered
+    // workflows (Factory Tour, BAC Finished/Didn't Finish, Inventory Quote,
+    // Inventory Reserve, Trade In Guide, Find A Dealer), plus Customer
+    // Engagement and the legacy Old System rows, which are too small to
+    // earn their own segment — collapses into one catch-all.
+    const NAMED = [MIX_LEADS_WF, MIX_MQL_WF, MIX_SQL_WF, MIX_RESORTS_WF, BROCHURE_WORKFLOW];
+    const otherWf = wfNamesByVolume.filter((w) => !NAMED.includes(w));
+
     const series = [
+      { name: "Leads - Exploring", color: seriesColor(1), values: periods.map((p) => sentFor(MIX_LEADS_WF, p)) },
+      { name: "MQL Considering", color: seriesColor(2), values: periods.map((p) => sentFor(MIX_MQL_WF, p)) },
       { name: "Brochure Downloads (MY26)", color: cssVar("--brochure-my26"), values: periods.map((p) => my26[p]) },
       { name: "Brochure Downloads (MY27)", color: seriesColor(0), values: periods.map((p) => my27[p]) },
-      ...top.map((w, i) => ({
-        name: shortName(w),
-        color: seriesColor(i + 1),
-        values: periods.map((p) => (wfPerf[w][p] && wfPerf[w][p].sent) || 0),
-      })),
-    ];
-    if (rest.length || periods.some((p) => brochureUnattributed(p) > 0)) {
-      series.push({
-        name: "Other",
+      { name: "SQL Nurture", color: seriesColor(3), values: periods.map((p) => sentFor(MIX_SQL_WF, p)) },
+      { name: "Resorts Guide", color: seriesColor(4), values: periods.map((p) => sentFor(MIX_RESORTS_WF, p)) },
+      {
+        name: "Other behavior triggered",
         color: OTHER_COLOR(),
-        values: periods.map((p) => rest.reduce((a, w) => a + ((wfPerf[w][p] && wfPerf[w][p].sent) || 0), brochureUnattributed(p))),
-      });
-    }
+        values: periods.map((p) => otherWf.reduce((a, w) => a + sentFor(w, p), brochureUnattributed(p))),
+      },
+    ];
     Viz.stackedBarChart(container, { categories, series, height: 300, mode: "absolute" });
     const legend = document.getElementById("legend-workflow-mix");
     legend.textContent = "";
