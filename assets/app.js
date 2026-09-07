@@ -18,6 +18,20 @@
     return m[2].replace(/-/g, "–");
   }
 
+  // Bare month name ("June" instead of "Jun 1-30") for charts where the date
+  // range is redundant noise once several months are shown side by side.
+  const MONTH_NAMES = {
+    jan: "January", feb: "February", mar: "March", apr: "April", may: "May",
+    jun: "June", jul: "July", aug: "August", sep: "September", oct: "October",
+    nov: "November", dec: "December",
+  };
+  function monthLabel(p) {
+    if (!p) return p;
+    const m = p.match(/\(([A-Za-z]+)/);
+    const name = m && MONTH_NAMES[m[1].slice(0, 3).toLowerCase()];
+    return name || periodLabel(p);
+  }
+
   function cssVar(name) {
     return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
   }
@@ -30,6 +44,14 @@
     const present = new Set(D.workflow_performance_by_period.map((r) => r.period_label));
     const inOrder = PERIODS.filter((p) => present.has(p));
     return [inOrder[inOrder.length - 2] || null, inOrder[inOrder.length - 1] || null];
+  }
+  // For charts that show a short trend across several periods rather than
+  // just prior-vs-latest. Returns up to the last n present periods, oldest
+  // first, with no null-padding.
+  function latestNWorkflowPeriods(n) {
+    const present = new Set(D.workflow_performance_by_period.map((r) => r.period_label));
+    const inOrder = PERIODS.filter((p) => present.has(p));
+    return inOrder.slice(-n);
   }
   function seriesColor(i) {
     return cssVar(`--series-${(i % 8) + 1}`);
@@ -402,6 +424,9 @@
   // WORKFLOWS TAB
   // -----------------------------------------------------------------
   const [PREV_WF, CURR_WF] = latestTwoWorkflowPeriods();
+  // The Workflows tab charts (as opposed to the cards/detail table below,
+  // which stay prior-vs-latest) show a short trend across up to 3 periods.
+  const GRAPH_WF_PERIODS = latestNWorkflowPeriods(3);
   const wfPerf = {};
   D.workflow_performance_by_period.forEach((r) => {
     wfPerf[r.workflow_name] = wfPerf[r.workflow_name] || {};
@@ -415,11 +440,13 @@
 
   function renderWorkflowOpenRate() {
     const container = document.getElementById("chart-workflow-openrate");
+    const periods = GRAPH_WF_PERIODS;
     const categories = wfNamesByVolume.map(shortName);
-    const series = [
-      { name: periodLabel(PREV_WF), color: seriesColor(0), values: wfNamesByVolume.map((w) => (PREV_WF && wfPerf[w][PREV_WF] ? wfPerf[w][PREV_WF].open_rate_pct : null)) },
-      { name: periodLabel(CURR_WF), color: seriesColor(1), values: wfNamesByVolume.map((w) => (CURR_WF && wfPerf[w][CURR_WF] ? wfPerf[w][CURR_WF].open_rate_pct : null)) },
-    ];
+    const series = periods.map((p, i) => ({
+      name: monthLabel(p),
+      color: seriesColor(i),
+      values: wfNamesByVolume.map((w) => (wfPerf[w][p] ? wfPerf[w][p].open_rate_pct : null)),
+    }));
     Viz.groupedBarChart(container, { categories, series, yFormat: (v) => v.toFixed(0) + "%", height: 300, barMax: 16, yMaxOverride: 100 });
     const legend = document.getElementById("legend-workflow-openrate");
     legend.textContent = "";
@@ -433,8 +460,8 @@
 
   function renderWorkflowMix() {
     const container = document.getElementById("chart-workflow-mix");
-    const periods = [PREV_WF, CURR_WF].filter(Boolean);
-    const categories = periods.map((p) => periodLabel(p));
+    const periods = GRAPH_WF_PERIODS;
+    const categories = periods.map(monthLabel);
     const TOP_N = 7;
     const top = wfNamesByVolume.slice(0, TOP_N);
     const rest = wfNamesByVolume.slice(TOP_N);
@@ -471,7 +498,7 @@
 
   function renderBrochureByModelYear() {
     const container = document.getElementById("chart-brochure-modelyear");
-    const periods = [PREV_WF, CURR_WF].filter(Boolean);
+    const periods = GRAPH_WF_PERIODS;
     // Excludes the shared "Next Steps + Engagement" closing email, which isn't
     // tied to one model year — it's the same email across every model's drip.
     const rows = brochureEmailRows().filter((r) => MODEL_EMAIL_RE.test(r.email_name));
@@ -488,7 +515,7 @@
       { name: "MY26", color: seriesColor(0), values: periods.map((p) => totals.MY26[p]) },
       { name: "MY27", color: seriesColor(1), values: periods.map((p) => totals.MY27[p]) },
     ];
-    Viz.stackedBarChart(container, { categories: periods.map((p) => periodLabel(p)), series, height: 300, mode: "absolute" });
+    Viz.stackedBarChart(container, { categories: periods.map(monthLabel), series, height: 300, mode: "absolute" });
 
     const legend = document.getElementById("legend-brochure-modelyear");
     legend.textContent = "";
@@ -502,7 +529,7 @@
 
   function renderBrochureByModel() {
     const container = document.getElementById("chart-brochure-bymodel");
-    const periods = [PREV_WF, CURR_WF].filter(Boolean);
+    const periods = GRAPH_WF_PERIODS;
     // Excludes the shared "Next Steps + Engagement" closing email — it isn't
     // one model, it's the same email sent across every model's drip.
     const rows = brochureEmailRows().filter((r) => MODEL_EMAIL_RE.test(r.email_name));
@@ -525,12 +552,12 @@
     });
 
     const series = periods.map((p, i) => ({
-      name: periodLabel(p),
+      name: monthLabel(p),
       color: seriesColor(i),
       values: categories.map((model) => byModel[model][p] || 0),
     }));
 
-    Viz.horizontalGroupedBarChart(container, { categories, series, rowHeight: 30, barMax: 11 });
+    Viz.horizontalGroupedBarChart(container, { categories, series, rowHeight: 42, barMax: 11 });
 
     const legend = document.getElementById("legend-brochure-bymodel");
     legend.textContent = "";
