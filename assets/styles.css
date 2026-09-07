@@ -23,6 +23,8 @@
   --seq-100: #cde2fb; --seq-250: #86b6ef; --seq-400: #3987e5;
   --seq-450: #2a78d6; --seq-500: #256abf; --seq-600: #184f95;
 
+  --brochure-my26: #15437e; /* deep navy — paired with --series-1 (MY27) to split one workflow's stack segment by model year without adding a new hue */
+
   --good:     #006300;
   --good-dk:  #0ca30c;
   --warning:  #fab219;
@@ -54,6 +56,8 @@
     --series-7: #d55181;
     --series-8: #d95926;
 
+    --brochure-my26: #2f6fc4;
+
     --good:    #0ca30c;
     --warning: #fab219;
     --serious: #ec835a;
@@ -80,6 +84,8 @@
   --series-7: #d55181;
   --series-8: #d95926;
 
+  --brochure-my26: #2f6fc4;
+
   --good:    #0ca30c;
 }
 
@@ -101,6 +107,8 @@
   --series-6: #e34948;
   --series-7: #e87ba4;
   --series-8: #eb6834;
+
+  --brochure-my26: #15437e;
 
   --good: #006300;
 }

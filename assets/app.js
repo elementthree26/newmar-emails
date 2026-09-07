@@ -462,20 +462,46 @@
     const container = document.getElementById("chart-workflow-mix");
     const periods = GRAPH_WF_PERIODS;
     const categories = periods.map(monthLabel);
-    const TOP_N = 7;
-    const top = wfNamesByVolume.slice(0, TOP_N);
-    const rest = wfNamesByVolume.slice(TOP_N);
 
-    const series = top.map((w, i) => ({
-      name: shortName(w),
-      color: seriesColor(i),
-      values: periods.map((p) => (wfPerf[w][p] && wfPerf[w][p].sent) || 0),
-    }));
-    if (rest.length) {
+    // Brochure Downloads gets split into its own MY26/MY27 segments (two
+    // shades of blue) instead of one workflow-level segment, so it takes 2
+    // of the 8 available hues instead of 1 — the other workflows are
+    // trimmed to top 5 (+ Other) to stay within the categorical-color limit.
+    const nonBrochureWf = wfNamesByVolume.filter((w) => w !== BROCHURE_WORKFLOW);
+    const TOP_N = 5;
+    const top = nonBrochureWf.slice(0, TOP_N);
+    const rest = nonBrochureWf.slice(TOP_N);
+
+    const brochureModelRows = brochureEmailRows().filter((r) => MODEL_EMAIL_RE.test(r.email_name));
+    const my26 = {}, my27 = {};
+    periods.forEach((p) => { my26[p] = 0; my27[p] = 0; });
+    brochureModelRows.forEach((r) => {
+      if (!periods.includes(r.period_label)) return;
+      const my = r.email_name.match(MODEL_EMAIL_RE)[1];
+      (my === "MY26" ? my26 : my27)[r.period_label] += r.sent || 0;
+    });
+    // Any Brochure Downloads volume not tied to one model year (the shared
+    // "Next Steps + Engagement" close-out email) folds into Other rather
+    // than being guessed at — it genuinely isn't MY26 or MY27 volume.
+    function brochureUnattributed(p) {
+      const total = (wfPerf[BROCHURE_WORKFLOW] && wfPerf[BROCHURE_WORKFLOW][p] && wfPerf[BROCHURE_WORKFLOW][p].sent) || 0;
+      return Math.max(0, total - my26[p] - my27[p]);
+    }
+
+    const series = [
+      { name: "Brochure Downloads (MY26)", color: cssVar("--brochure-my26"), values: periods.map((p) => my26[p]) },
+      { name: "Brochure Downloads (MY27)", color: seriesColor(0), values: periods.map((p) => my27[p]) },
+      ...top.map((w, i) => ({
+        name: shortName(w),
+        color: seriesColor(i + 1),
+        values: periods.map((p) => (wfPerf[w][p] && wfPerf[w][p].sent) || 0),
+      })),
+    ];
+    if (rest.length || periods.some((p) => brochureUnattributed(p) > 0)) {
       series.push({
         name: "Other",
         color: OTHER_COLOR(),
-        values: periods.map((p) => rest.reduce((a, w) => a + ((wfPerf[w][p] && wfPerf[w][p].sent) || 0), 0)),
+        values: periods.map((p) => rest.reduce((a, w) => a + ((wfPerf[w][p] && wfPerf[w][p].sent) || 0), brochureUnattributed(p))),
       });
     }
     Viz.stackedBarChart(container, { categories, series, height: 300, mode: "absolute" });
