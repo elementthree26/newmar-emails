@@ -507,7 +507,7 @@
         values: periods.map((p) => otherWf.reduce((a, w) => a + sentFor(w, p), brochureUnattributed(p))),
       },
     ];
-    Viz.stackedBarChart(container, { categories, series, height: 300, mode: "absolute" });
+    Viz.stackedBarChart(container, { categories, series, height: 300, mode: "absolute", showTotals: true });
     const legend = document.getElementById("legend-workflow-mix");
     legend.textContent = "";
     series.forEach((s) => {

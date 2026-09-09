@@ -398,24 +398,26 @@
   // opts: { categories:[str], series:[{name,color,values}], height, mode:'percent'|'absolute', yFormat(v), tooltipFormat(v) }
   // 'percent' (default): values are shares 0..100, axis is a fixed 0-100% scale.
   // 'absolute': values are raw counts, axis is a niceMax'd scale over the tallest stacked total.
+  // opts.showTotals: draw each bar's stacked total as a direct label above it.
   function stackedBarChart(container, opts) {
     container.textContent = "";
     const width = container.clientWidth || 640;
     const height = opts.height || 260;
-    const marginL = 52, marginR = 16, marginT = 16, marginB = 30;
+    const marginL = 52, marginR = 16, marginT = opts.showTotals ? 30 : 16, marginB = 30;
     const innerW = width - marginL - marginR;
     const innerH = height - marginT - marginB;
     const surfaceColor = cssVar("--surface-1");
     const mutedColor = cssVar("--text-muted");
     const gridlineColor = cssVar("--gridline");
     const baselineColor = cssVar("--baseline");
+    const primaryColor = cssVar("--text-primary");
     const isAbsolute = opts.mode === "absolute";
 
     const svg = el("svg", { viewBox: `0 0 ${width} ${height}`, width: "100%", height });
 
+    const totals = opts.categories.map((_, ci) => opts.series.reduce((a, s) => a + (s.values[ci] || 0), 0));
     let yMax = 100;
     if (isAbsolute) {
-      const totals = opts.categories.map((_, ci) => opts.series.reduce((a, s) => a + (s.values[ci] || 0), 0));
       yMax = niceMax(Math.max(...totals) * 1.1);
     }
     const yFormat = opts.yFormat || ((v) => (isAbsolute ? fmtCommas(v) : v + "%"));
@@ -458,6 +460,15 @@
         svg.appendChild(rect);
         acc += v;
       });
+      if (opts.showTotals) {
+        const totalY = marginT + innerH - (totals[ci] / yMax) * innerH - 8;
+        const totalLabel = el("text", {
+          x: marginL + groupW * ci + groupW / 2, y: totalY,
+          "text-anchor": "middle", fill: primaryColor, "font-size": 12, "font-weight": 600,
+        });
+        totalLabel.textContent = yFormat(totals[ci]);
+        svg.appendChild(totalLabel);
+      }
       const label = el("text", {
         x: marginL + groupW * ci + groupW / 2, y: height - 8,
         "text-anchor": "middle", fill: mutedColor, "font-size": 11,
